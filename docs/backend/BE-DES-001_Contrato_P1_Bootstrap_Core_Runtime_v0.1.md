@@ -1,10 +1,10 @@
 # BE-DES-001 — Contrato de Implementación P-1 Bootstrap y Core Runtime
 
-**Versión:** 0.1  
-**Estado:** CONGELADO PARA IMPLEMENTACIÓN P-1  
-**Fecha:** 2026-08-21  
-**Repositorio:** `CesarQuea/erp-platform`  
-**Base autorizada:** `3db050fdb8edfc442f0c1e67fef928185cbbf615`  
+**Versión:** 0.1
+**Estado:** CONGELADO PARA IMPLEMENTACIÓN P-1
+**Fecha:** 2026-08-21
+**Repositorio:** `CesarQuea/erp-platform`
+**Base autorizada:** `3db050fdb8edfc442f0c1e67fef928185cbbf615`
 **Rama:** `feat/platform-p1-core-runtime`
 
 ## 1. Objetivo
