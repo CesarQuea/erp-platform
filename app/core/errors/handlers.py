@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.errors.models import PlatformError
@@ -42,6 +43,30 @@ def install_exception_handlers(app: FastAPI) -> None:
                 code=exc.code,
                 message=exc.message,
                 correlation_id=_correlation_id(request),
+            ),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_request_validation_error(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        # Never serialize exc.errors() or exc.body here: validation failures may
+        # contain passwords, refresh tokens or other credentials supplied by the client.
+        correlation_id = _correlation_id(request)
+        logger.info(
+            "request_validation_failed",
+            extra={
+                "correlation_id": correlation_id,
+                "error_count": len(exc.errors()),
+            },
+        )
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(
+                code="REQUEST_VALIDATION_FAILED",
+                message="Request validation failed.",
+                correlation_id=correlation_id,
             ),
         )
 
