@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID
 
 from app.core.identifiers.uuid import new_uuid
@@ -42,6 +42,7 @@ from app.platform.identity.security import (
 from app.platform.tenancy.registry import TenantRegistry
 
 logger = logging.getLogger(__name__)
+IdFactory = Callable[[], UUID]
 
 
 class CompanyDirectory(Protocol):
@@ -84,10 +85,12 @@ class AuthenticationService:
         issuer: str,
         audience: str,
         clock: Clock | None = None,
-        id_factory=None,
+        id_factory: IdFactory | None = None,
         access_token_ttl: timedelta = timedelta(minutes=15),
         refresh_token_ttl: timedelta = timedelta(days=30),
     ) -> None:
+        if access_token_ttl <= timedelta(0) or refresh_token_ttl <= timedelta(0):
+            raise ValueError("token TTLs must be positive")
         self._repository = repository
         self._transaction = transaction
         self._password_hasher = password_hasher
@@ -112,20 +115,30 @@ class AuthenticationService:
         client_label: str | None = None,
     ) -> TokenPair:
         now = self._clock.now()
-        normalized = normalize_login(login)
+        try:
+            normalized = normalize_login(login)
+        except ValueError:
+            self._password_hasher.verify(password, self._dummy_password_hash)
+            logger.info("login_failed")
+            raise authentication_failed() from None
 
         def operation():
             user = self._repository.get_user_by_normalized_login(normalized)
-            if user is None:
-                self._password_hasher.verify(password, self._dummy_password_hash)
-                return None
-            password_hash = self._repository.get_password_hash(user.id)
+            password_hash = (
+                self._repository.get_password_hash(user.id) if user is not None else None
+            )
+            verified = self._password_hasher.verify(
+                password,
+                password_hash or self._dummy_password_hash,
+            )
             if (
-                user.status is not UserStatus.ACTIVE
+                user is None
+                or user.status is not UserStatus.ACTIVE
                 or password_hash is None
-                or not self._password_hasher.verify(password, password_hash)
+                or not verified
             ):
                 return None
+
             session = AuthSession(
                 id=self._id_factory(),
                 user_id=user.id,
@@ -153,12 +166,13 @@ class AuthenticationService:
         if result is None:
             logger.info("login_failed")
             raise authentication_failed()
+
         user, session, refresh_plaintext, refresh_expires_at = result
+        access, access_expires_at = self._issue_access_token(user.id, session.id)
         logger.info(
             "login_succeeded",
             extra={"user_id": str(user.id), "session_id": str(session.id)},
         )
-        access, access_expires_at = self._issue_access_token(user.id, session.id)
         return TokenPair(
             access,
             refresh_plaintext,
@@ -175,29 +189,35 @@ class AuthenticationService:
             record = self._repository.get_refresh_by_hash(token_hash)
             if record is None:
                 return None
+
             session = self._repository.get_session(record.session_id)
             if (
                 record.revoked_at is not None
                 or record.consumed_at is not None
                 or record.expires_at <= now
             ):
-                self._repository.revoke_refresh_family(record.family_id, now)
-                self._repository.revoke_session(record.session_id, now)
+                self._revoke_refresh_replay(record, now)
                 return None
-            if session is None or session.revoked_at is not None or session.expires_at <= now:
+            if (
+                session is None
+                or session.revoked_at is not None
+                or session.expires_at <= now
+            ):
                 self._repository.revoke_refresh_family(record.family_id, now)
                 if session is not None:
                     self._repository.revoke_session(session.id, now)
                 return None
+
             user = self._repository.get_user_by_id(session.user_id)
             if user is None or user.status is not UserStatus.ACTIVE:
                 self._repository.revoke_refresh_family(record.family_id, now)
                 self._repository.revoke_session(session.id, now)
                 return None
+
             if not self._repository.consume_refresh(record.id, now):
-                self._repository.revoke_refresh_family(record.family_id, now)
-                self._repository.revoke_session(session.id, now)
+                self._revoke_refresh_replay(record, now)
                 return None
+
             material = self._refresh_tokens.generate()
             expires_at = now + self._refresh_token_ttl
             self._repository.add_refresh_token(
@@ -217,6 +237,7 @@ class AuthenticationService:
         if result is None:
             logger.warning("refresh_rejected")
             raise authentication_failed()
+
         user, session, new_refresh, refresh_expires_at = result
         access, access_expires_at = self._issue_access_token(user.id, session.id)
         logger.info(
@@ -236,56 +257,13 @@ class AuthenticationService:
             claims = self._token_codec.decode(token)
         except ValueError:
             raise authentication_failed() from None
-        now = self._clock.now()
 
-        def operation() -> AuthenticatedPrincipal | None:
-            session = self._repository.get_session(claims.session_id)
-            if (
-                session is None
-                or session.user_id != claims.user_id
-                or session.revoked_at is not None
-                or session.expires_at <= now
-            ):
-                return None
-            user = self._repository.get_user_by_id(claims.user_id)
-            if user is None or user.status is not UserStatus.ACTIVE:
-                return None
-            if (claims.tenant_id is None) != (claims.company_id is None):
-                return None
-            if claims.tenant_id is not None and claims.company_id is not None:
-                membership = self._repository.get_membership(user.id, claims.tenant_id)
-                if membership is None or membership.status is not AccessStatus.ACTIVE:
-                    return None
-                company_access = self._repository.get_company_access(
-                    membership.id,
-                    claims.company_id,
-                )
-                if company_access is None or company_access.status is not AccessStatus.ACTIVE:
-                    return None
-            assignments = self._repository.list_role_assignments(user.id)
-            role_ids = [assignment.role_id for assignment in assignments]
-            roles = {role.id: role for role in self._repository.get_roles(role_ids)}
-            permissions = self._repository.get_permission_codes_by_roles(role_ids)
-            principal = AuthenticatedPrincipal(
-                user_id=user.id,
-                session_id=session.id,
-                tenant_id=claims.tenant_id,
-                company_id=claims.company_id,
-                effective_permissions=effective_permissions(
-                    user_id=user.id,
-                    tenant_id=claims.tenant_id,
-                    company_id=claims.company_id,
-                    assignments=assignments,
-                    roles=roles,
-                    role_permissions=permissions,
-                ),
-            )
-            self._repository.touch_session(session.id, now)
-            return principal
-
-        principal = self._transaction.run(operation)
+        principal = self._transaction.run(
+            lambda: self._load_principal(claims, self._clock.now())
+        )
         if principal is None:
             raise authentication_failed()
+
         if principal.tenant_id is not None and principal.company_id is not None:
             company = self._company_directory.get_company(
                 principal.tenant_id,
@@ -321,19 +299,18 @@ class AuthenticationService:
         return user
 
     def list_contexts(self, principal: AuthenticatedPrincipal) -> list[AuthorizedContext]:
-        def operation():
-            rows: list[tuple[UUID, UUID]] = []
+        def operation() -> list[tuple[UUID, UUID]]:
+            candidates: list[tuple[UUID, UUID]] = []
             for membership in self._repository.list_memberships(principal.user_id):
                 if membership.status is not AccessStatus.ACTIVE:
                     continue
                 for access in self._repository.list_company_access(membership.id):
                     if access.status is AccessStatus.ACTIVE:
-                        rows.append((membership.tenant_id, access.company_id))
-            return rows
+                        candidates.append((membership.tenant_id, access.company_id))
+            return candidates
 
-        candidates = self._transaction.run(operation)
         contexts: list[AuthorizedContext] = []
-        for tenant_id, company_id in candidates:
+        for tenant_id, company_id in self._transaction.run(operation):
             company = self._company_directory.get_company(tenant_id, company_id)
             if company is not None and company.is_active:
                 contexts.append(
@@ -353,12 +330,9 @@ class AuthenticationService:
         tenant_id: UUID,
         company_id: UUID,
     ) -> ContextToken:
-        company = self._company_directory.get_company(tenant_id, company_id)
-        if company is None or not company.is_active:
-            raise access_denied()
         now = self._clock.now()
 
-        def operation() -> bool:
+        def authorized_globally() -> bool:
             session = self._repository.get_session(principal.session_id)
             user = self._repository.get_user_by_id(principal.user_id)
             if (
@@ -374,12 +348,15 @@ class AuthenticationService:
             if membership is None or membership.status is not AccessStatus.ACTIVE:
                 return False
             access = self._repository.get_company_access(membership.id, company_id)
-            if access is None or access.status is not AccessStatus.ACTIVE:
-                return False
-            return True
+            return access is not None and access.status is AccessStatus.ACTIVE
 
-        if not self._transaction.run(operation):
+        # Never touch the requested Tenant DB before global authority allows the context.
+        if not self._transaction.run(authorized_globally):
             raise access_denied()
+        company = self._company_directory.get_company(tenant_id, company_id)
+        if company is None or not company.is_active:
+            raise access_denied()
+
         token, expires_at = self._issue_access_token(
             principal.user_id,
             principal.session_id,
@@ -387,6 +364,62 @@ class AuthenticationService:
             company_id=company_id,
         )
         return ContextToken(token, expires_at)
+
+    def _load_principal(
+        self,
+        claims: AccessTokenClaims,
+        now: datetime,
+    ) -> AuthenticatedPrincipal | None:
+        session = self._repository.get_session(claims.session_id)
+        if (
+            session is None
+            or session.user_id != claims.user_id
+            or session.revoked_at is not None
+            or session.expires_at <= now
+        ):
+            return None
+
+        user = self._repository.get_user_by_id(claims.user_id)
+        if user is None or user.status is not UserStatus.ACTIVE:
+            return None
+        if (claims.tenant_id is None) != (claims.company_id is None):
+            return None
+
+        if claims.tenant_id is not None and claims.company_id is not None:
+            membership = self._repository.get_membership(user.id, claims.tenant_id)
+            if membership is None or membership.status is not AccessStatus.ACTIVE:
+                return None
+            company_access = self._repository.get_company_access(
+                membership.id,
+                claims.company_id,
+            )
+            if company_access is None or company_access.status is not AccessStatus.ACTIVE:
+                return None
+
+        assignments = self._repository.list_role_assignments(user.id)
+        role_ids = [assignment.role_id for assignment in assignments]
+        roles = {role.id: role for role in self._repository.get_roles(role_ids)}
+        permissions = self._repository.get_permission_codes_by_roles(role_ids)
+        principal = AuthenticatedPrincipal(
+            user_id=user.id,
+            session_id=session.id,
+            tenant_id=claims.tenant_id,
+            company_id=claims.company_id,
+            effective_permissions=effective_permissions(
+                user_id=user.id,
+                tenant_id=claims.tenant_id,
+                company_id=claims.company_id,
+                assignments=assignments,
+                roles=roles,
+                role_permissions=permissions,
+            ),
+        )
+        self._repository.touch_session(session.id, now)
+        return principal
+
+    def _revoke_refresh_replay(self, record: RefreshTokenRecord, now: datetime) -> None:
+        self._repository.revoke_refresh_family(record.family_id, now)
+        self._repository.revoke_session(record.session_id, now)
 
     def _issue_access_token(
         self,
@@ -423,7 +456,7 @@ class IdentityProvisioningService:
         *,
         password_policy: PasswordPolicy | None = None,
         clock: Clock | None = None,
-        id_factory=None,
+        id_factory: IdFactory | None = None,
     ) -> None:
         self._repository = repository
         self._transaction = transaction
@@ -444,19 +477,20 @@ class IdentityProvisioningService:
     ) -> UserAccount:
         normalized = normalize_login(login)
         self._password_policy.validate(password=password, login=login)
+        display_name = display_name.strip()
+        if not display_name:
+            raise ValueError("display_name cannot be blank")
         now = self._clock.now()
         user = UserAccount(
             id=self._id_factory(),
             login=login.strip(),
             login_normalized=normalized,
-            display_name=display_name.strip(),
+            display_name=display_name,
             email=email.strip() if email else None,
             status=UserStatus.ACTIVE,
             created_at=now,
             updated_at=now,
         )
-        if not user.display_name:
-            raise ValueError("display_name cannot be blank")
         password_hash = self._password_hasher.hash(password)
 
         def operation() -> UserAccount:
@@ -490,8 +524,7 @@ class IdentityProvisioningService:
         now = self._clock.now()
 
         def operation() -> None:
-            user = self._repository.get_user_by_id(user_id)
-            if user is None:
+            if self._repository.get_user_by_id(user_id) is None:
                 raise identity_not_found()
             self._repository.set_user_status(user_id, status, now)
             if status is not UserStatus.ACTIVE:
@@ -671,6 +704,7 @@ class IdentityProvisioningService:
             if not roles:
                 raise identity_not_found("Role was not found.")
             role = roles[0]
+
             if role.scope is RoleScope.TENANT:
                 membership = (
                     self._repository.get_membership(user_id, tenant_id)
@@ -697,6 +731,7 @@ class IdentityProvisioningService:
                     or access.status is not AccessStatus.ACTIVE
                 ):
                     raise access_denied()
+
             candidate = RoleAssignment(
                 id=self._id_factory(),
                 user_id=user_id,
