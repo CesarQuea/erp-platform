@@ -1,10 +1,10 @@
 # BE-DES-002 — Contrato de Implementación P-2 Tenancy, Company y PostgreSQL por Tenant
 
-**Versión:** 0.1  
-**Estado:** CONGELADO PARA IMPLEMENTACIÓN P-2  
-**Fecha:** 2026-08-22  
-**Repositorio:** `CesarQuea/erp-platform`  
-**Base autorizada:** `7e38e022481fdef18011064c5ba2f80d16c92c16`  
+**Versión:** 0.1
+**Estado:** CONGELADO PARA IMPLEMENTACIÓN P-2
+**Fecha:** 2026-08-22
+**Repositorio:** `CesarQuea/erp-platform`
+**Base autorizada:** `7e38e022481fdef18011064c5ba2f80d16c92c16`
 **Rama:** `feat/platform-p2-tenancy-company-db`
 
 ---
