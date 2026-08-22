@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.bootstrap.identity_platform import IdentityPlatformRuntime
 from app.platform.identity.errors import authentication_failed, identity_unavailable
@@ -17,13 +17,13 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 class LoginRequest(BaseModel):
-    login: str
-    password: str
-    client_label: str | None = None
+    login: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+    client_label: str | None = Field(default=None, max_length=120)
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str = Field(min_length=32, max_length=512)
 
 
 class ContextRequest(BaseModel):
