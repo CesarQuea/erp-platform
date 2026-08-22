@@ -108,3 +108,21 @@ def test_legacy_db_info_endpoint_is_removed():
         response = client.get("/db-info")
 
     assert response.status_code == 404
+
+
+def test_unexpected_error_response_and_logs_do_not_expose_exception_secret(caplog):
+    settings = Settings(environment="test")
+    factory = FakeDatabaseRuntimeFactory(ready=True)
+    app = create_app(settings=settings, database_runtime_factory=factory)
+
+    @app.get("/api/v1/test-unexpected-error")
+    def unexpected_error():
+        raise RuntimeError("postgresql://user:log-secret@db.example/erp")
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/api/v1/test-unexpected-error")
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
+    assert "log-secret" not in response.text
+    assert "log-secret" not in caplog.text

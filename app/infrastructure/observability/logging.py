@@ -16,6 +16,11 @@ class JsonLogFormatter(logging.Formatter):
         correlation_id = getattr(record, "correlation_id", None)
         if correlation_id:
             payload["correlation_id"] = correlation_id
+
+        error_type = getattr(record, "error_type", None)
+        if error_type:
+            payload["error_type"] = error_type
+
         return json.dumps(payload, ensure_ascii=False)
 
 

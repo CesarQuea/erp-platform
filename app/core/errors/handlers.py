@@ -51,9 +51,12 @@ def install_exception_handlers(app: FastAPI) -> None:
         exc: Exception,
     ) -> JSONResponse:
         correlation_id = _correlation_id(request)
-        logger.exception(
+        logger.error(
             "unhandled_request_error",
-            extra={"correlation_id": correlation_id},
+            extra={
+                "correlation_id": correlation_id,
+                "error_type": type(exc).__name__,
+            },
         )
         return JSONResponse(
             status_code=500,
