@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from uuid import UUID
 
+from app.platform.identity.errors import access_denied
 from app.platform.identity.model import AuthenticatedPrincipal, Role, RoleAssignment, RoleScope
 
 
@@ -38,11 +39,7 @@ def effective_permissions(
     return frozenset(granted)
 
 
-class AuthorizationDeniedError(PermissionError):
-    pass
-
-
 class AuthorizationService:
     def require(self, principal: AuthenticatedPrincipal, permission_code: str) -> None:
         if permission_code not in principal.effective_permissions:
-            raise AuthorizationDeniedError("permission denied")
+            raise access_denied()
