@@ -3,7 +3,7 @@
 **Versión:** 0.1  
 **Estado:** CONGELADO PARA IMPLEMENTACIÓN P-1  
 **Fecha:** 2026-08-21  
-**Repositorio:** `CesarQuea/aliosur-backend`  
+**Repositorio:** `CesarQuea/erp-platform`  
 **Base autorizada:** `3db050fdb8edfc442f0c1e67fef928185cbbf615`  
 **Rama:** `feat/platform-p1-core-runtime`
 
@@ -187,7 +187,7 @@ ChatGPT revisará código, diff y evidencias antes de recomendar cierre.
 - ImplementationProfile;
 - Web;
 - proveedor cloud;
-- rename administrativo del repositorio.
+- cambios administrativos adicionales del repositorio.
 
 ## 11. Git
 
