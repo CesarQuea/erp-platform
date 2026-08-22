@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine, insert
+from sqlalchemy.orm import Session
 
 from app.infrastructure.database.models import TenantMetadataRecord
 from app.infrastructure.database.session_scope import TenantSessionScope
@@ -13,7 +14,12 @@ from app.infrastructure.tenancy.environment_registry import EnvironmentTenantReg
 from app.platform.company.model import Company
 from app.platform.ownership import OwnershipScope
 from app.platform.tenancy.context import TenantContext
-from app.platform.tenancy.errors import TenantDatabaseIdentityError, TenantNotConfiguredError
+from app.platform.tenancy.errors import (
+    TenantDatabaseIdentityError,
+    TenantNotConfiguredError,
+    TenantRegistryConfigurationError,
+    TenantSessionScopeError,
+)
 from app.platform.tenancy.registry import TenantConnectionConfig
 
 
@@ -22,6 +28,8 @@ def test_tenant_context_requires_uuid():
     assert TenantContext.from_value(str(tenant_id)).tenant_id == tenant_id
     with pytest.raises(ValueError):
         TenantContext.from_value("not-a-uuid")
+    with pytest.raises(TypeError):
+        TenantContext("not-a-uuid")  # type: ignore[arg-type]
 
 
 def test_environment_registry_hides_database_url_and_fails_closed():
@@ -35,6 +43,15 @@ def test_environment_registry_hides_database_url_and_fails_closed():
     assert "secret" not in repr(config)
     with pytest.raises(TenantNotConfiguredError):
         registry.get(uuid4())
+
+
+def test_environment_registry_rejects_key_config_tenant_mismatch():
+    key_tenant = uuid4()
+    config_tenant = uuid4()
+    with pytest.raises(TenantRegistryConfigurationError):
+        EnvironmentTenantRegistry(
+            {key_tenant: TenantConnectionConfig(config_tenant, "sqlite://tenant")}
+        )
 
 
 def test_company_validates_human_fields_and_timezone():
@@ -104,8 +121,23 @@ def test_resolver_rejects_metadata_mismatch():
 
 def test_session_scope_fails_closed_without_transaction():
     scope = TenantSessionScope()
-    with pytest.raises(Exception):
+    with pytest.raises(TenantSessionScopeError):
         scope.current()
+
+
+def test_session_scope_rejects_nested_cross_tenant_reuse():
+    scope = TenantSessionScope()
+    tenant_a, tenant_b = uuid4(), uuid4()
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with Session(engine) as session_a, Session(engine) as session_b:
+        with scope.activate(tenant_a, session_a):
+            assert scope.current(expected_tenant_id=tenant_a) is session_a
+            with pytest.raises(TenantSessionScopeError):
+                scope.current(expected_tenant_id=tenant_b)
+            with pytest.raises(TenantSessionScopeError):
+                with scope.activate(tenant_b, session_b):
+                    pass
+    engine.dispose()
 
 
 def test_settings_hide_tenant_registry_secrets():

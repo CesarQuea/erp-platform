@@ -42,28 +42,37 @@ def _engine_for_file(path: Path, tenant_id: UUID):
     return engine
 
 
-def test_company_service_isolates_two_tenant_databases(tmp_path):
-    tenant_a, tenant_b = uuid4(), uuid4()
-    engine_a = _engine_for_file(tmp_path / "a.db", tenant_a)
-    engine_b = _engine_for_file(tmp_path / "b.db", tenant_b)
-    by_url = {"sqlite://a": engine_a, "sqlite://b": engine_b}
+def _service_for_tenants(mapping: dict[UUID, tuple[str, object]]):
     registry = EnvironmentTenantRegistry(
         {
-            tenant_a: TenantConnectionConfig(tenant_a, "sqlite://a"),
-            tenant_b: TenantConnectionConfig(tenant_b, "sqlite://b"),
+            tenant_id: TenantConnectionConfig(tenant_id, url)
+            for tenant_id, (url, _) in mapping.items()
         }
     )
+    by_url = {url: engine for url, engine in mapping.values()}
     resolver = SqlAlchemyTenantDataSourceResolver(
         registry,
         engine_factory=lambda url, **kwargs: by_url[url],
     )
     scope = TenantSessionScope()
-    tx_factory = SqlAlchemyTenantTransactionBoundaryFactory(resolver, scope)
     service = CompanyService(
         SqlAlchemyCompanyRepository(scope),
-        tx_factory,
+        SqlAlchemyTenantTransactionBoundaryFactory(resolver, scope),
         clock=FixedClock(),
         id_factory=uuid4,
+    )
+    return service, resolver
+
+
+def test_company_service_isolates_two_tenant_databases(tmp_path):
+    tenant_a, tenant_b = uuid4(), uuid4()
+    engine_a = _engine_for_file(tmp_path / "a.db", tenant_a)
+    engine_b = _engine_for_file(tmp_path / "b.db", tenant_b)
+    service, resolver = _service_for_tenants(
+        {
+            tenant_a: ("sqlite://a", engine_a),
+            tenant_b: ("sqlite://b", engine_b),
+        }
     )
 
     company_a = service.register_company(
@@ -82,22 +91,26 @@ def test_company_service_isolates_two_tenant_databases(tmp_path):
     resolver.dispose()
 
 
+def test_multiple_companies_can_exist_inside_one_tenant(tmp_path):
+    tenant_id = uuid4()
+    engine = _engine_for_file(tmp_path / "multi-company.db", tenant_id)
+    service, resolver = _service_for_tenants(
+        {tenant_id: ("sqlite://multi-company", engine)}
+    )
+    context = TenantContext(tenant_id)
+    service.register_company(context, code="A", legal_name="Company A")
+    service.register_company(context, code="B", legal_name="Company B")
+    assert [company.code for company in service.list_companies(context)] == ["A", "B"]
+    with pytest.raises(CompanyNotFoundError):
+        service.get_company(context, uuid4())
+    resolver.dispose()
+
+
 def test_unique_company_conflict_rolls_back(tmp_path):
     tenant_id = uuid4()
     engine = _engine_for_file(tmp_path / "tenant.db", tenant_id)
-    registry = EnvironmentTenantRegistry(
-        {tenant_id: TenantConnectionConfig(tenant_id, "sqlite://tenant")}
-    )
-    resolver = SqlAlchemyTenantDataSourceResolver(
-        registry,
-        engine_factory=lambda url, **kwargs: engine,
-    )
-    scope = TenantSessionScope()
-    service = CompanyService(
-        SqlAlchemyCompanyRepository(scope),
-        SqlAlchemyTenantTransactionBoundaryFactory(resolver, scope),
-        clock=FixedClock(),
-        id_factory=uuid4,
+    service, resolver = _service_for_tenants(
+        {tenant_id: ("sqlite://tenant", engine)}
     )
     context = TenantContext(tenant_id)
     service.register_company(context, code="DUP", legal_name="First")

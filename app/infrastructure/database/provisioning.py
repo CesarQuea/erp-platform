@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Callable
 
+from alembic.util.exc import CommandError
 from sqlalchemy import create_engine, inspect, insert, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -52,7 +53,7 @@ class TenantProvisioner:
         try:
             self._migration_runner.upgrade(config.database_url)
             revision = self._migration_runner.current_revision(config.database_url)
-        except Exception:
+        except (SQLAlchemyError, CommandError):
             raise TenantDatabaseUnavailableError(
                 f"Tenant database provisioning failed for {context.tenant_id}"
             ) from None

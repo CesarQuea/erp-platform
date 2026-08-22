@@ -8,6 +8,10 @@ from uuid import UUID
 class TenantContext:
     tenant_id: UUID
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.tenant_id, UUID):
+            raise TypeError("tenant_id must be a UUID")
+
     @classmethod
     def from_value(cls, value: UUID | str) -> "TenantContext":
         if isinstance(value, UUID):

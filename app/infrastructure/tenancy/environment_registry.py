@@ -15,7 +15,15 @@ class EnvironmentTenantRegistry:
     """Configuration-backed registry intended for bootstrap/test until a control plane exists."""
 
     def __init__(self, entries: Mapping[UUID, TenantConnectionConfig] | None = None) -> None:
-        self._entries = dict(entries or {})
+        self._entries: dict[UUID, TenantConnectionConfig] = {}
+        for tenant_id, config in (entries or {}).items():
+            if not isinstance(tenant_id, UUID):
+                raise TenantRegistryConfigurationError("Tenant registry key must be a UUID")
+            if config.tenant_id != tenant_id:
+                raise TenantRegistryConfigurationError(
+                    "Tenant registry key must match connection config tenant_id"
+                )
+            self._entries[tenant_id] = config
 
     @classmethod
     def from_json(cls, payload: str | None) -> "EnvironmentTenantRegistry":
