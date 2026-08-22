@@ -11,6 +11,9 @@ from app.platform.identity.model import AuthenticatedPrincipal, UserAccount, Use
 from app.platform.identity.service import AuthorizedContext, ContextToken, TokenPair
 
 
+TEST_REFRESH_TOKEN = "r" * 43
+
+
 class FakeDatabaseRuntime:
     def check_ready(self) -> bool:
         return True
@@ -30,7 +33,7 @@ class FakeIdentityAuthentication:
     def _pair(self) -> TokenPair:
         return TokenPair(
             access_token="access-token",
-            refresh_token="refresh-token",
+            refresh_token=TEST_REFRESH_TOKEN,
             session_id=self.session_id,
             access_expires_at=self.now + timedelta(minutes=15),
             refresh_expires_at=self.now + timedelta(days=30),
@@ -127,7 +130,7 @@ def test_auth_endpoints_are_wired_without_exposing_tenant_database_details() -> 
         )
         refreshed = client.post(
             "/api/v1/auth/refresh",
-            json={"refresh_token": "refresh-token"},
+            json={"refresh_token": TEST_REFRESH_TOKEN},
         )
         logout = client.post("/api/v1/auth/logout", headers=headers)
 
