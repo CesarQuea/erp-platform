@@ -123,3 +123,15 @@ class AuthenticatedPrincipal:
     @property
     def has_operational_context(self) -> bool:
         return self.tenant_id is not None and self.company_id is not None
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshTokenRecord:
+    id: UUID
+    session_id: UUID
+    family_id: UUID
+    token_hash: str
+    created_at: datetime
+    expires_at: datetime
+    consumed_at: datetime | None = None
+    revoked_at: datetime | None = None
