@@ -164,6 +164,29 @@ def test_missing_bearer_token_is_401() -> None:
     assert response.json()["error"]["code"] == "AUTHENTICATION_FAILED"
 
 
+def test_validation_errors_never_reflect_password_or_refresh_token() -> None:
+    password_marker = "PASSWORD-MUST-NEVER-BE-REFLECTED-" + ("x" * 160)
+    refresh_marker = "REFRESH-MUST-NEVER-BE-REFLECTED-" + ("y" * 600)
+    with _client(FakeIdentityRuntime()) as client:
+        invalid_login = client.post(
+            "/api/v1/auth/login",
+            json={"login": "ana", "password": password_marker},
+        )
+        invalid_refresh = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": refresh_marker},
+        )
+
+    for response, marker in (
+        (invalid_login, password_marker),
+        (invalid_refresh, refresh_marker),
+    ):
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "REQUEST_VALIDATION_FAILED"
+        assert marker not in response.text
+        assert "input" not in response.text.lower()
+
+
 def test_identity_secrets_are_hidden_and_short_secrets_rejected() -> None:
     settings = Settings(
         environment="test",
