@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -168,15 +169,21 @@ def test_login_context_and_company_rbac_are_scope_bound(services) -> None:
     assert getattr(revoked.value, "code", None) == "AUTHENTICATION_FAILED"
 
 
-def test_refresh_rotation_replay_revokes_the_session(services) -> None:
+def test_refresh_rotation_replay_revokes_the_session(
+    services,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     _, _, authentication, _, _ = _authorized_user(services)
     first = authentication.login(login="ana", password="12345678!")
     second = authentication.refresh(first.refresh_token)
     assert second.refresh_token != first.refresh_token
 
-    with pytest.raises(Exception) as replay:
-        authentication.refresh(first.refresh_token)
+    with caplog.at_level(logging.WARNING, logger="app.platform.identity.service"):
+        with pytest.raises(Exception) as replay:
+            authentication.refresh(first.refresh_token)
     assert getattr(replay.value, "code", None) == "AUTHENTICATION_FAILED"
+    assert "refresh_replay_detected" in [record.getMessage() for record in caplog.records]
+    assert first.refresh_token not in caplog.text
 
     with pytest.raises(Exception) as revoked:
         authentication.principal_from_access_token(second.access_token)
