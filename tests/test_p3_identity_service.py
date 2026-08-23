@@ -169,6 +169,22 @@ def test_login_context_and_company_rbac_are_scope_bound(services) -> None:
     assert getattr(revoked.value, "code", None) == "AUTHENTICATION_FAILED"
 
 
+def test_inactive_company_is_denied_during_context_selection(services) -> None:
+    _, _, authentication, tenant_id, company_id = _authorized_user(services)
+    directory = services[4]
+    pair = authentication.login(login="ana", password="12345678!")
+    identity = authentication.principal_from_access_token(pair.access_token)
+    directory.active = False
+
+    with pytest.raises(Exception) as denied:
+        authentication.select_context(
+            identity,
+            tenant_id=tenant_id,
+            company_id=company_id,
+        )
+    assert getattr(denied.value, "code", None) == "ACCESS_DENIED"
+
+
 def test_refresh_rotation_replay_revokes_the_session(
     services,
     caplog: pytest.LogCaptureFixture,
