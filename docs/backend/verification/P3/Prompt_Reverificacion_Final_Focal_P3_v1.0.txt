@@ -1,0 +1,258 @@
+PROMPT — REVERIFICACIÓN FINAL FOCAL P-3 v1.0
+MICROFIX AUDITORÍA REFRESH REPLAY + COMPANY INACTIVA + ROTACIÓN REAL
+
+ROL
+Actúa únicamente como verificador independiente del corte P-3 de ERP Platform.
+NO implementes, NO corrijas, NO reformatees y NO modifiques código, tests ni documentos.
+No commit, push, merge, tag, rebase ni force-push.
+
+REPOSITORIO
+CesarQuea/erp-platform
+
+PR
+Draft PR #3 — Identity, Authentication, Membership & Authorization
+
+RAMA
+feat/platform-p3-identity-access
+
+BASE AUTORIZADA
+128a7b17aeaf09d8c534f95e722e7d05fffbccbf
+
+HEAD PREVIO VERIFICADO
+147914a6e6accb92773793c5f3d2e3b01b406126
+
+SNAPSHOT FUNCIONAL + TEST DEL MICROFIX
+7f9566c82b9e93b81afdba7178414d56e0df0e5e
+
+AUTORIDAD CONTRACTUAL
+- docs/backend/BE-DES-003_Contrato_P3_Identity_Authentication_Authorization_v0.1.md
+- docs/backend/BE-DES-003A_Adenda_Aprobada_P3_Password_y_Sesion_v1.0.md
+
+CONTEXTO DEL MICROFIX
+La verificación previa fue favorable, pero dejó tres cierres focales:
+1) el replay de refresh debía producir un evento explícito `refresh_replay_detected`, sin exponer refresh token/hash;
+2) faltaba evidencia explícita de Company existente pero inactiva => acceso/contexto denegado;
+3) la evidencia Docker debía demostrar inequívocamente que `/refresh` devuelve un nuevo access token y un nuevo refresh token rotado, sin imprimir los secretos.
+
+El microfix autorizado añadió:
+- logging explícito `refresh_replay_detected` en `AuthenticationService._revoke_refresh_replay`;
+- cobertura de test para el evento y ausencia del refresh token en logs;
+- cobertura de test para Company inactiva => `ACCESS_DENIED`.
+
+A. PRECHECK GIT — OBLIGATORIO
+Trabaja sobre una copia/worktree limpia de la rama remota.
+
+Registrar salida COMPLETA y exit codes NUMÉRICOS:
+- git status --short
+- git branch --show-current
+- git fetch origin
+- git rev-parse HEAD
+- git rev-parse origin/feat/platform-p3-identity-access
+- git merge-base HEAD 128a7b17aeaf09d8c534f95e722e7d05fffbccbf
+- git rev-list --left-right --count 128a7b17aeaf09d8c534f95e722e7d05fffbccbf...HEAD
+- git diff --stat 147914a6e6accb92773793c5f3d2e3b01b406126...HEAD
+- git diff --name-status 147914a6e6accb92773793c5f3d2e3b01b406126...HEAD
+- git diff --stat 7f9566c82b9e93b81afdba7178414d56e0df0e5e...HEAD
+- git diff --name-status 7f9566c82b9e93b81afdba7178414d56e0df0e5e...HEAD
+- git diff --check 128a7b17aeaf09d8c534f95e722e7d05fffbccbf...HEAD
+
+Condiciones:
+- rama exacta;
+- HEAD local = HEAD remoto;
+- merge-base = base autorizada;
+- behind = 0;
+- working tree limpio antes y después;
+- entre 147914a6... y 7f9566c... solo pueden existir cambios focales en:
+  * app/platform/identity/service.py
+  * tests/test_p3_identity_service.py
+- después de 7f9566c... solo puede haber documentación/evidencia del corte. Si aparece código/test funcional posterior, DETÉN y reporta INCOMPLETE.
+
+B. REVISIÓN ESTÁTICA DEL MICROFIX
+Contrasta el diff real y confirma:
+1. `_revoke_refresh_replay` continúa revocando familia y sesión;
+2. además emite exactamente un evento inequívoco `refresh_replay_detected`;
+3. el evento no incluye plaintext refresh token, token hash, JWT, password ni secretos;
+4. no se debilitó la protección replay/single-use;
+5. no cambió JWT, Argon2id, RBAC, Membership, CompanyAccess, Tenant routing ni persistencia;
+6. el test de replay exige el evento y comprueba que el refresh token no aparece en logs;
+7. existe test de Company inactiva => `ACCESS_DENIED`;
+8. no hay cambios de schema/Alembic, P-1/P-2, Dockerfile ni configuración fuera de alcance.
+
+C. FOCALES DEL MICROFIX
+Ejecuta:
+
+python -m pytest -q \
+  tests/test_p3_identity_service.py::test_refresh_rotation_replay_revokes_the_session \
+  tests/test_p3_identity_service.py::test_inactive_company_is_denied_during_context_selection \
+  --junitxml=verification/p3-final-focal/junit_microfix.xml
+
+Guardar:
+- stdout/stderr completo;
+- exit code numérico;
+- XML JUnit real.
+
+Debe quedar:
+- replay del refresh anterior => AUTHENTICATION_FAILED;
+- sesión/familia revocada;
+- `refresh_replay_detected` capturado;
+- plaintext del refresh no aparece en log;
+- Company inactiva => ACCESS_DENIED.
+
+D. SUITE COMPLETA SOBRE EL NUEVO HEAD
+Como cambió código productivo respecto al HEAD anteriormente verificado, repetir:
+
+python -m pytest -q --junitxml=verification/p3-final-focal/junit_full.xml
+
+No aceptar solo “tests passed”.
+Derivar del XML:
+- tests;
+- failures;
+- errors;
+- skipped.
+
+Resultado requerido:
+- failures = 0
+- errors = 0
+
+E. COMPILE
+Ejecuta:
+
+python -m compileall app scripts tests
+
+Guardar log y exit code numérico = 0.
+
+F. DOCKER / RUNTIME REAL — ROTACIÓN DE REFRESH
+Levantar el stack P-3 usando Platform PostgreSQL real y Tenant DB de prueba según el procedimiento ya utilizado en P-3/P-2.
+Construir y ejecutar la imagen del MISMO HEAD.
+
+Como mínimo:
+- docker build => exit 0;
+- container running;
+- GET /health => 200 con DB ready.
+
+Ejecutar flujo REAL por API:
+1. login válido;
+2. conservar internamente `refresh_1` SIN imprimirlo;
+3. POST /api/v1/auth/refresh con `refresh_1`;
+4. comprobar:
+   - status = 200;
+   - `access_token` presente y no vacío;
+   - `refresh_token` presente y no vacío;
+   - `refresh_2 != refresh_1`;
+5. NO imprimir `refresh_1`, `refresh_2` ni access tokens;
+6. repetir POST /refresh con `refresh_1`;
+7. debe fallar 401;
+8. comprobar que la sesión/familia quedó revocada según contrato.
+
+La evidencia debe registrar solo booleanos/metadata segura, por ejemplo:
+- refresh_status=200
+- access_token_present=True
+- refresh_token_present=True
+- refresh_rotated=True
+- replay_status=401
+Nunca registrar los valores de los tokens.
+
+G. COMPANY INACTIVA — EVIDENCIA DINÁMICA
+Demostrar explícitamente:
+- Tenant válido;
+- Membership ACTIVE;
+- CompanyAccess ACTIVE;
+- Company existente pero `is_active = false`;
+- selección de contexto => 403 / ACCESS_DENIED.
+
+Preferir entorno/base desechable.
+Si para preparar el caso es necesario modificar directamente `companies.is_active` en la Tenant DB, hacerlo SOLO como setup de prueba, documentarlo y descartar/restaurar la base después.
+No modificar código para lograr la prueba.
+
+H. AUDITORÍA DE SEGURIDAD REAL
+Capturar logs runtime/CLI estructurados y demostrar, sin secretos, al menos los eventos aplicables:
+
+- login_succeeded
+- login_failed
+- refresh_succeeded
+- refresh_replay_detected
+- logout
+- membership_granted
+- membership_revoked
+- company_access_granted
+- company_access_revoked
+- role_assignment_granted
+- role_assignment_revoked
+- access_denied o context selection denied equivalente
+
+No basta con logs de Alembic.
+Verificar expresamente que NO aparezcan:
+- password;
+- plaintext refresh token;
+- refresh token hash;
+- JWT completo;
+- DSN/credenciales.
+
+Crear un archivo de evidencia que liste los nombres de eventos observados y el resultado del secret scan, sin copiar secretos.
+
+I. REGRESIÓN P-1/P-2
+No repetir manualmente toda la campaña extensa si la suite completa ya incluye la regresión vigente y queda verde.
+Sí verificar que:
+- health/readiness continúan funcionando;
+- resolución Tenant P-2 no se alteró;
+- CompanyDirectory sigue resolviendo contra el Tenant correcto;
+- no existe fallback cross-Tenant.
+
+Si la suite o Docker muestran regresión, escalar a verificación completa P-1/P-2.
+
+J. SECRET / SCOPE SCAN
+Ejecutar el mecanismo de scan ya utilizado en P-3 y guardar evidencia.
+Debe confirmar:
+- sin password/token/hash/DSN en logs/evidencias;
+- sin lógica Aliosur/Dairy/sectorial;
+- sin bypass hardcodeado de usuario/Tenant/Company.
+
+K. EVIDENCIAS
+Crear localmente SIN COMMIT:
+
+verification/p3-final-focal/<HEAD>/
+
+Incluir como mínimo:
+- 01_git_precheck.txt
+- 02_diff_microfix.txt
+- 03_git_diff_check.txt
+- 04_microfix_pytest.log
+- junit_microfix.xml
+- 05_full_pytest.log
+- junit_full.xml
+- 06_compileall.log
+- 07_docker_build_run.log
+- 08_refresh_rotation_runtime.txt
+- 09_company_inactive_runtime.txt
+- 10_security_audit_events.txt
+- 11_secret_scope_scan.txt
+- 12_git_postcheck.txt
+- REPORT_P3_FINAL_FOCAL.md
+- hashes_sha256.txt
+
+Los archivos de exit code deben contener enteros reales (0, 1, ...), NO `True/False`.
+
+L. VEREDICTO
+PASS únicamente si:
+- precheck Git conforme;
+- diff focal conforme;
+- `git diff --check` exit 0;
+- focales PASS;
+- suite completa PASS con XML real;
+- compileall PASS;
+- Docker build/run PASS;
+- refresh real entrega access + refresh nuevos y rotados;
+- replay antiguo => 401 y queda auditado como `refresh_replay_detected`;
+- Company inactiva => 403/ACCESS_DENIED;
+- auditoría real contiene los eventos requeridos sin secretos;
+- secret/scope scan PASS;
+- working tree final limpio.
+
+FAIL si un gate ejecutado falla por implementación.
+INCOMPLETE si falta cualquier evidencia obligatoria.
+
+NO modificar código.
+NO recomendar merge.
+NO cerrar P-3.
+NO iniciar P-4 ni O-4.
+ChatGPT contrastará código, diff, XML/logs y evidencias; solo el usuario autoriza el cierre.
