@@ -420,6 +420,10 @@ class AuthenticationService:
     def _revoke_refresh_replay(self, record: RefreshTokenRecord, now: datetime) -> None:
         self._repository.revoke_refresh_family(record.family_id, now)
         self._repository.revoke_session(record.session_id, now)
+        logger.warning(
+            "refresh_replay_detected",
+            extra={"session_id": str(record.session_id)},
+        )
 
     def _issue_access_token(
         self,
