@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.errors.models import PlatformError
@@ -36,12 +37,46 @@ def install_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: PlatformError,
     ) -> JSONResponse:
+        correlation_id = _correlation_id(request)
+        if exc.code == "ACCESS_DENIED":
+            logger.warning(
+                "access_denied",
+                extra={
+                    "correlation_id": correlation_id,
+                    "path": request.url.path,
+                },
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content=_error_payload(
                 code=exc.code,
                 message=exc.message,
-                correlation_id=_correlation_id(request),
+                correlation_id=correlation_id,
+            ),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_request_validation_error(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        # Never serialize exc.errors() or exc.body here: validation failures may
+        # contain passwords, refresh tokens or other credentials supplied by the client.
+        correlation_id = _correlation_id(request)
+        logger.info(
+            "request_validation_failed",
+            extra={
+                "correlation_id": correlation_id,
+                "error_count": len(exc.errors()),
+                "path": request.url.path,
+            },
+        )
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(
+                code="REQUEST_VALIDATION_FAILED",
+                message="Request validation failed.",
+                correlation_id=correlation_id,
             ),
         )
 
@@ -56,6 +91,7 @@ def install_exception_handlers(app: FastAPI) -> None:
             extra={
                 "correlation_id": correlation_id,
                 "error_type": type(exc).__name__,
+                "path": request.url.path,
             },
         )
         return JSONResponse(

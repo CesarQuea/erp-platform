@@ -5,6 +5,24 @@ import logging
 from datetime import datetime, timezone
 
 
+_SAFE_EXTRA_FIELDS = (
+    "correlation_id",
+    "error_type",
+    "error_count",
+    "user_id",
+    "session_id",
+    "tenant_id",
+    "company_id",
+    "membership_id",
+    "assignment_id",
+    "role_id",
+    "permission_id",
+    "family_id",
+    "status",
+    "path",
+)
+
+
 class JsonLogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
@@ -13,13 +31,10 @@ class JsonLogFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        correlation_id = getattr(record, "correlation_id", None)
-        if correlation_id:
-            payload["correlation_id"] = correlation_id
-
-        error_type = getattr(record, "error_type", None)
-        if error_type:
-            payload["error_type"] = error_type
+        for field_name in _SAFE_EXTRA_FIELDS:
+            value = getattr(record, field_name, None)
+            if value is not None and value != "":
+                payload[field_name] = value
 
         return json.dumps(payload, ensure_ascii=False)
 
