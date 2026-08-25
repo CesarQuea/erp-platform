@@ -7,7 +7,9 @@ from uuid import uuid4
 import pytest
 
 from app.core.errors.models import PlatformError
+from app.platform.commands.fingerprint import command_fingerprint
 from app.platform.commands.model import (
+    CommandContext,
     CommandExecutionRecord,
     CommandRequest,
     CommandResult,
@@ -47,6 +49,7 @@ class InMemoryRepository:
             fingerprint=old.fingerprint,
             result_code=result_code,
             result_json=dict(result_json),
+            committed_at=committed_at,
         )
 
 
@@ -209,3 +212,33 @@ def test_oversized_replay_result_rolls_back():
         )
     assert exc.value.code == "IDEMPOTENCY_RESULT_TOO_LARGE"
     assert request.command_id not in repo.records
+
+
+def test_incomplete_execution_record_fails_closed_instead_of_replaying():
+    repo, state = InMemoryRepository(), {}
+    service = CommandExecutionService(repo, BoundaryFactory(repo, state), clock=FixedClock())
+    p = make_principal()
+    request = CommandRequest(uuid4(), "test.incomplete", "1", CommandScope.COMPANY)
+    context = CommandContext.from_principal(request, p)
+    fingerprint = command_fingerprint(context, {})
+    repo.records[request.command_id] = CommandExecutionRecord(
+        command_id=request.command_id,
+        command_name=context.command_name,
+        command_schema_version=context.command_schema_version,
+        scope=context.scope,
+        company_id=context.company_id,
+        actor_user_id=context.actor_user_id,
+        fingerprint=fingerprint,
+        result_code="OK",
+        result_json={"should": "not replay"},
+        committed_at=None,
+    )
+
+    with pytest.raises(PlatformError) as exc:
+        service.execute(
+            request,
+            {},
+            authorize=lambda: p,
+            operation=lambda: pytest.fail("must not execute"),
+        )
+    assert exc.value.code == "COMMAND_EXECUTION_UNAVAILABLE"
