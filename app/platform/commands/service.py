@@ -153,7 +153,11 @@ class CommandExecutionService:
                 raise CommandExecutionUnavailableSignal()
             if existing.fingerprint != fingerprint:
                 raise IdempotencyConflictSignal()
-            if existing.result_code is None or existing.result_json is None:
+            if (
+                existing.result_code is None
+                or existing.result_json is None
+                or existing.committed_at is None
+            ):
                 raise CommandExecutionUnavailableSignal()
             return CommandExecutionOutcome(
                 result=CommandResult(existing.result_code, existing.result_json),
