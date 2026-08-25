@@ -24,7 +24,7 @@ def principal(*, tenant=None, company=None, user=None, session=None):
 def test_company_context_is_derived_from_principal():
     tenant_id, company_id, user_id = uuid4(), uuid4(), uuid4()
     p = principal(tenant=tenant_id, company=company_id, user=user_id)
-    request = CommandRequest(uuid4(), "inventory.test", "1", CommandScope.COMPANY)
+    request = CommandRequest(uuid4(), "domain.test", "1", CommandScope.COMPANY)
     context = CommandContext.from_principal(request, p)
     assert context.tenant_id == tenant_id
     assert context.company_id == company_id
@@ -48,7 +48,7 @@ def test_company_scope_requires_authorized_company():
 def test_fingerprint_is_deterministic_and_ignores_session_and_correlation():
     tenant_id, company_id, user_id = uuid4(), uuid4(), uuid4()
     request = CommandRequest(
-        uuid4(), "milking.confirm", "1", CommandScope.COMPANY, 7, "req-a"
+        uuid4(), "domain.confirm", "1", CommandScope.COMPANY, 7, "req-a"
     )
     p1 = principal(tenant=tenant_id, company=company_id, user=user_id, session=uuid4())
     p2 = principal(tenant=tenant_id, company=company_id, user=user_id, session=uuid4())
