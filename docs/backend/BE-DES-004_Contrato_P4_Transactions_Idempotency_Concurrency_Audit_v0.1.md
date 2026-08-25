@@ -1,15 +1,15 @@
 # BE-DES-004 — Contrato P-4 Transactions, Idempotency, Concurrency & Audit
 
-**Versión:** 0.1  
-**Estado:** APROBADO / CERRADO CONTRACTUALMENTE / CONGELADO — IMPLEMENTACIÓN AUTORIZADA  
-**Fecha:** 2026-08-24  
-**Repositorio:** `CesarQuea/erp-platform`  
-**Plan maestro:** `BE-PLAN-001 v0.2`  
-**Base de implementación autorizada:** `main @ 2427b8be82385e5f4c071df1e01b084087baee22`  
+**Versión:** 0.1
+**Estado:** APROBADO / CERRADO CONTRACTUALMENTE / CONGELADO — IMPLEMENTACIÓN AUTORIZADA
+**Fecha:** 2026-08-24
+**Repositorio:** `CesarQuea/erp-platform`
+**Plan maestro:** `BE-PLAN-001 v0.2`
+**Base de implementación autorizada:** `main @ 2427b8be82385e5f4c071df1e01b084087baee22`
 **Rama:** `feat/platform-p4-command-integrity`
 
-**Aprobación contractual:** aprobada expresamente por el usuario el 2026-08-24.  
-**Autorización de implementación:** el usuario autorizó expresamente `main @ 2427b8be82385e5f4c071df1e01b084087baee22` como base de implementación de P-4.  
+**Aprobación contractual:** aprobada expresamente por el usuario el 2026-08-24.
+**Autorización de implementación:** el usuario autorizó expresamente `main @ 2427b8be82385e5f4c071df1e01b084087baee22` como base de implementación de P-4.
 **Efecto:** quedan congelados alcance, invariantes, exclusiones y decisiones técnicas de P-4. El merge, cierre de P-4 e inicio de P-5 requieren autorizaciones separadas.
 
 ---
