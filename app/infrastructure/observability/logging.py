@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 _SAFE_EXTRA_FIELDS = (
     "correlation_id",
     "error_type",
+    "error_code",
     "error_count",
     "user_id",
     "session_id",
@@ -18,6 +19,12 @@ _SAFE_EXTRA_FIELDS = (
     "role_id",
     "permission_id",
     "family_id",
+    "command_id",
+    "command_name",
+    "scope",
+    "expected_version",
+    "current_version",
+    "outcome",
     "status",
     "path",
 )
