@@ -40,7 +40,11 @@ def _postgres_entries() -> list[tuple[UUID, str]]:
     entries: list[tuple[UUID, str]] = []
     for raw_tenant_id, config in parsed.items():
         url = config["database_url"]
-        if not (url.startswith("postgresql://") or url.startswith("postgres://") or url.startswith("postgresql+psycopg://")):
+        if not (
+            url.startswith("postgresql://")
+            or url.startswith("postgres://")
+            or url.startswith("postgresql+psycopg://")
+        ):
             continue
         entries.append((UUID(str(raw_tenant_id)), url))
     if len(entries) < 2:
@@ -114,7 +118,11 @@ def _principal(tenant_id: UUID, company_id: UUID, user_id: UUID | None = None):
     )
 
 
-def test_postgres_concurrent_retries_same_command_have_exactly_one_effect(postgres_runtime):
+@pytest.mark.parametrize("_iteration", range(5))
+def test_postgres_concurrent_retries_same_command_have_exactly_one_effect(
+    postgres_runtime,
+    _iteration,
+):
     entries, scope, resolver, service, _, resource, companies = postgres_runtime
     tenant_id = entries[0][0]
     company = companies[tenant_id]
@@ -144,13 +152,105 @@ def test_postgres_concurrent_retries_same_command_have_exactly_one_effect(postgr
     assert sum(outcome.replayed for outcome in outcomes) == 7
     engine = resolver.resolve(TenantContext(tenant_id)).engine
     with engine.connect() as connection:
-        assert len(connection.execute(select(resource)).all()) == 1
+        rows = connection.execute(
+            select(resource).where(resource.c.id == resource_id)
+        ).all()
+        assert len(rows) == 1
         command = connection.execute(
             select(CommandExecutionRecordModel).where(
                 CommandExecutionRecordModel.command_id == command_id
             )
         ).one()
         assert command.result_code == "CREATED"
+        assert command.committed_at is not None
+
+
+def test_postgres_concurrent_same_command_different_fingerprint_conflicts(postgres_runtime):
+    entries, scope, resolver, service, _, resource, companies = postgres_runtime
+    tenant_id = entries[0][0]
+    company = companies[tenant_id]
+    principal = _principal(tenant_id, company.id)
+    command_id, resource_id = uuid4(), uuid4()
+    request = CommandRequest(command_id, "p4.concurrent.conflict", "1", CommandScope.COMPANY)
+
+    def invoke(value: str):
+        def operation():
+            scope.current(expected_tenant_id=tenant_id).execute(
+                insert(resource).values(id=resource_id, value=value, version=0)
+            )
+            time.sleep(0.1)
+            return CommandResult("CREATED", {"id": str(resource_id), "value": value})
+
+        try:
+            outcome = service.execute(
+                request,
+                {"id": resource_id, "value": value},
+                authorize=lambda: principal,
+                operation=operation,
+            )
+            return "REPLAY" if outcome.replayed else "SUCCEEDED"
+        except PlatformError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(invoke, ("intent-a", "intent-b")))
+
+    assert sorted(outcomes) == ["IDEMPOTENCY_CONFLICT", "SUCCEEDED"]
+    engine = resolver.resolve(TenantContext(tenant_id)).engine
+    with engine.connect() as connection:
+        rows = connection.execute(
+            select(resource).where(resource.c.id == resource_id)
+        ).mappings().all()
+        assert len(rows) == 1
+        assert rows[0]["value"] in {"intent-a", "intent-b"}
+
+
+def test_postgres_failed_transaction_removes_claim_and_allows_retry(postgres_runtime):
+    entries, scope, resolver, service, _, resource, companies = postgres_runtime
+    tenant_id = entries[0][0]
+    company = companies[tenant_id]
+    principal = _principal(tenant_id, company.id)
+    command_id, resource_id = uuid4(), uuid4()
+    request = CommandRequest(command_id, "p4.rollback.create", "1", CommandScope.COMPANY)
+
+    def failing_operation():
+        scope.current(expected_tenant_id=tenant_id).execute(
+            insert(resource).values(id=resource_id, value="rolled-back", version=0)
+        )
+        raise RuntimeError("forced rollback")
+
+    with pytest.raises(RuntimeError):
+        service.execute(
+            request,
+            {"id": resource_id},
+            authorize=lambda: principal,
+            operation=failing_operation,
+        )
+
+    engine = resolver.resolve(TenantContext(tenant_id)).engine
+    with engine.connect() as connection:
+        assert connection.execute(
+            select(resource).where(resource.c.id == resource_id)
+        ).all() == []
+        assert connection.execute(
+            select(CommandExecutionRecordModel).where(
+                CommandExecutionRecordModel.command_id == command_id
+            )
+        ).all() == []
+
+    def successful_operation():
+        scope.current(expected_tenant_id=tenant_id).execute(
+            insert(resource).values(id=resource_id, value="committed", version=0)
+        )
+        return CommandResult("CREATED", {"id": str(resource_id)})
+
+    outcome = service.execute(
+        request,
+        {"id": resource_id},
+        authorize=lambda: principal,
+        operation=successful_operation,
+    )
+    assert not outcome.replayed
 
 
 def test_postgres_cas_allows_one_writer_and_rejects_stale_writer(postgres_runtime):
