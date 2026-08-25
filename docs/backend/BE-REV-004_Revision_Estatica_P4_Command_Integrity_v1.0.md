@@ -1,12 +1,12 @@
 # BE-REV-004 — Revisión Estática P-4 Command Integrity
 
-**Versión:** 1.0  
-**Estado:** REVISIÓN ESTÁTICA COMPLETADA — LISTO PARA VERIFICACIÓN INDEPENDIENTE  
-**Fecha:** 2026-08-24  
-**Repositorio:** `CesarQuea/erp-platform`  
-**PR:** `#6 — draft: P-4 command integrity foundation`  
-**Base autorizada:** `2427b8be82385e5f4c071df1e01b084087baee22`  
-**HEAD funcional revisado:** `e040690b5f3d21cbb9c2a3eee6413adeed6d5253`  
+**Versión:** 1.0
+**Estado:** REVISIÓN ESTÁTICA COMPLETADA — LISTO PARA VERIFICACIÓN INDEPENDIENTE
+**Fecha:** 2026-08-24
+**Repositorio:** `CesarQuea/erp-platform`
+**PR:** `#6 — draft: P-4 command integrity foundation`
+**Base autorizada:** `2427b8be82385e5f4c071df1e01b084087baee22`
+**HEAD funcional revisado:** `e040690b5f3d21cbb9c2a3eee6413adeed6d5253`
 **Contrato:** `BE-DES-004 v0.1`
 
 ---
