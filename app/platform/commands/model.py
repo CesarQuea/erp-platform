@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Mapping
 from uuid import UUID
@@ -116,3 +117,4 @@ class CommandExecutionRecord:
     fingerprint: str
     result_code: str | None = None
     result_json: Mapping[str, object] | None = None
+    committed_at: datetime | None = None
