@@ -65,6 +65,7 @@ class SqlAlchemyCommandExecutionRepository:
             fingerprint=row.fingerprint,
             result_code=row.result_code,
             result_json=row.result_json,
+            committed_at=row.committed_at,
         )
 
     def complete(
