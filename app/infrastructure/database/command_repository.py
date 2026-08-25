@@ -46,8 +46,9 @@ class SqlAlchemyCommandExecutionRepository:
             raise RuntimeError(
                 f"P-4 command idempotency does not support database dialect {dialect!r}"
             )
-        result = session.execute(statement)
-        return result.rowcount == 1
+        statement = statement.returning(CommandExecutionRecordModel.command_id)
+        claimed_id = session.execute(statement).scalar_one_or_none()
+        return claimed_id is not None
 
     def get(self, command_id: UUID) -> CommandExecutionRecord | None:
         session = self._session_scope.current()
