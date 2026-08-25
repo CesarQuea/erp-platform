@@ -27,7 +27,7 @@ def test_provisioning_runs_alembic_and_is_idempotent(tmp_path: Path):
     provisioner = TenantProvisioner(registry, migration_runner=runner)
 
     revision = provisioner.provision(TenantContext(tenant_id))
-    assert revision == "0001_p2_tenant_company"
+    assert revision == "0002_p4_command_execution"
     assert provisioner.provision(TenantContext(tenant_id)) == revision
 
     engine = create_engine(database_url)
@@ -35,6 +35,7 @@ def test_provisioning_runs_alembic_and_is_idempotent(tmp_path: Path):
         assert set(inspect(engine).get_table_names()) == {
             "alembic_version",
             "companies",
+            "platform_command_executions",
             "platform_tenant_metadata",
         }
         with engine.connect() as connection:
