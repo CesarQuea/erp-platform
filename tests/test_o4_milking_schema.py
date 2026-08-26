@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Numeric
+from sqlalchemy import CheckConstraint, Numeric
 
 from app.infrastructure.database.milking_models import (
     MilkingAnnulmentRequestRecord,
@@ -20,8 +20,11 @@ def _constraint_names(record: type) -> set[str]:
     return {constraint.name for constraint in record.__table__.constraints if constraint.name}
 
 
-def _index_names(record: type) -> set[str]:
-    return {index.name for index in record.__table__.indexes}
+def _check_sql(record: type, name: str) -> str:
+    for constraint in record.__table__.constraints:
+        if isinstance(constraint, CheckConstraint) and constraint.name == name:
+            return str(constraint.sqltext)
+    raise AssertionError(f"missing check constraint {name}")
 
 
 def test_o4_schema_contains_only_contractual_milking_tables() -> None:
@@ -145,3 +148,12 @@ def test_session_schema_enforces_general_only_and_lifecycle_consistency() -> Non
         "ck_milking_session_draft_not_authoritative",
         "ck_milking_session_use_discard_within_general",
     } <= constraints
+
+    done_sql = _check_sql(MilkingSessionRecord, "ck_milking_session_done_consistent")
+    assert "general_gross_quantity IS NOT NULL" in done_sql
+    assert "authoritative_gross_quantity = general_gross_quantity" in done_sql
+    assert "reconciliation_status = 'NOT_REQUIRED'" in done_sql
+
+    cancelled_sql = _check_sql(MilkingSessionRecord, "ck_milking_session_cancelled_consistent")
+    assert "cancel_reason IS NOT NULL" in cancelled_sql
+    assert "char_length(btrim(cancel_reason)) > 0" in cancelled_sql

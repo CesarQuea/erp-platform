@@ -141,11 +141,14 @@ class MilkingSessionRecord(Base):
         ),
         CheckConstraint(
             "status <> 'DONE' OR ("
+            "general_gross_quantity IS NOT NULL AND "
             "authoritative_gross_quantity IS NOT NULL AND "
+            "authoritative_gross_quantity = general_gross_quantity AND "
             "authoritative_total_source = 'GENERAL' AND "
             "used_on_farm_quantity IS NOT NULL AND "
             "discarded_quantity IS NOT NULL AND "
             "net_output_quantity IS NOT NULL AND "
+            "reconciliation_status = 'NOT_REQUIRED' AND "
             "confirmed_at IS NOT NULL AND confirmed_by IS NOT NULL AND "
             "net_output_quantity = authoritative_gross_quantity - used_on_farm_quantity - discarded_quantity"
             ")",
@@ -153,7 +156,7 @@ class MilkingSessionRecord(Base):
         ),
         CheckConstraint(
             "status <> 'CANCELLED' OR (cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL "
-            "AND char_length(btrim(cancel_reason)) > 0)",
+            "AND cancel_reason IS NOT NULL AND char_length(btrim(cancel_reason)) > 0)",
             name="ck_milking_session_cancelled_consistent",
         ),
         CheckConstraint(
