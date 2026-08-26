@@ -13,6 +13,10 @@ def resource_not_available() -> PlatformError:
     return PlatformError("RESOURCE_NOT_AVAILABLE", "Milking resource is not available.", 404)
 
 
+def milking_unavailable() -> PlatformError:
+    return PlatformError("MILKING_UNAVAILABLE", "Milking service is unavailable.", 503)
+
+
 def validation_failed(detail: str) -> PlatformError:
     return PlatformError("VALIDATION_FAILED", detail, 400)
 
