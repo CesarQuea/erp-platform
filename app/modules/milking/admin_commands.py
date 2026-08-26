@@ -14,6 +14,11 @@ def _require_expected_version(value: int) -> None:
         raise ValueError("expected_version must be a positive integer")
 
 
+def _require_profile_version(value: int) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError("profile_version must be a positive integer")
+
+
 class CreateOutputProfile:
     def __init__(
         self,
@@ -64,6 +69,7 @@ class SetOutputProfileActive:
         client_occurred_at: datetime,
         client_instance_id: str | None = None,
     ) -> None:
+        _require_profile_version(profile_version)
         _require_expected_version(expected_version)
         _require_aware(client_occurred_at)
         self.command_id = command_id
@@ -89,8 +95,7 @@ class CreateMilkingConfiguration:
     ) -> None:
         if not shift_code.strip():
             raise ValueError("shift_code cannot be blank")
-        if output_profile_version <= 0:
-            raise ValueError("output_profile_version must be positive")
+        _require_profile_version(output_profile_version)
         _require_aware(client_occurred_at)
         self.command_id = command_id
         self.farm_id = farm_id
@@ -115,8 +120,8 @@ class UpdateMilkingConfiguration:
         client_instance_id: str | None = None,
     ) -> None:
         _require_expected_version(expected_version)
-        if output_profile_version is not None and output_profile_version <= 0:
-            raise ValueError("output_profile_version must be positive")
+        if output_profile_version is not None:
+            _require_profile_version(output_profile_version)
         if (output_profile_id is None) != (output_profile_version is None):
             raise ValueError("output_profile_id and output_profile_version must be changed together")
         if output_profile_id is None and is_active is None:
