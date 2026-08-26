@@ -16,6 +16,9 @@ from app.platform.tenancy.errors import TenantDatabaseIdentityError, TenantInact
 from app.platform.tenancy.registry import TenantConnectionConfig
 
 
+_P4_HEAD = "0002_p4_command_execution"
+
+
 def test_provisioning_runs_alembic_and_is_idempotent(tmp_path: Path):
     tenant_id = uuid4()
     database_path = tmp_path / "tenant.db"
@@ -23,11 +26,14 @@ def test_provisioning_runs_alembic_and_is_idempotent(tmp_path: Path):
     registry = EnvironmentTenantRegistry(
         {tenant_id: TenantConnectionConfig(tenant_id, database_url)}
     )
-    runner = TenantMigrationRunner(repository_root=Path(__file__).resolve().parents[1])
+    runner = TenantMigrationRunner(
+        repository_root=Path(__file__).resolve().parents[1],
+        target_revision=_P4_HEAD,
+    )
     provisioner = TenantProvisioner(registry, migration_runner=runner)
 
     revision = provisioner.provision(TenantContext(tenant_id))
-    assert revision == "0002_p4_command_execution"
+    assert revision == _P4_HEAD
     assert provisioner.provision(TenantContext(tenant_id)) == revision
 
     engine = create_engine(database_url)
