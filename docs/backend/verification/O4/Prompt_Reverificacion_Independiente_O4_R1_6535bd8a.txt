@@ -1,0 +1,550 @@
+PROMPT — REVERIFICACIÓN INDEPENDIENTE O-4 R1 BACKEND CLOUD MILKING GENERAL
+
+ROL
+Actúa exclusivamente como AGENTE VERIFICADOR INDEPENDIENTE del corte O-4 R1 de AliosurERP18.
+NO eres agente implementador.
+
+REGLA ABSOLUTA
+NO MODIFIQUES código, tests, migraciones, contratos ni configuración versionada.
+NO hagas commit, push, merge, tag, rebase, reset --hard ni force push.
+NO corrijas hallazgos.
+Si un gate falla: conserva evidencia y clasifica FAIL_VERIFICATION.
+Si falta infraestructura obligatoria que no puedas levantar de forma aislada: BLOCKED_VERIFICATION.
+Nunca conviertas un skip obligatorio en PASS.
+
+============================================================
+1. SNAPSHOT AUTORIZADO
+============================================================
+
+Repositorio:
+CesarQuea/erp-platform
+
+Rama:
+feat/milking-o4-backend-cloud-general
+
+Draft PR:
+#8
+
+Base autorizada:
+8cdd0ee47db9569ca6fcec4530f3c3dffb9390ed
+
+HEAD técnico anterior que falló:
+e38999ada6ad14d40dfba17ecc62cf7fc4291ac8
+
+HEAD TÉCNICO O-4 R1 CONGELADO A VERIFICAR:
+6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+
+Acta R1:
+docs/backend/BE-MLK-FREEZE-004_R1_Congelamiento_Tecnico_O4_v1.0.md
+
+Contrato principal:
+docs/backend/BE-MLK-DES-004_Contrato_O4_Backend_Cloud_Milking_GENERAL_v0.1.md
+
+La rama puede contener commits DOCUMENTALES posteriores a 6535bd8a (acta/prompt). Son válidos solo si el diff posterior no toca app/, tests/, migrations/, platform_migrations/, requirements*, Dockerfile, alembic*.ini ni otra configuración ejecutable.
+
+============================================================
+2. CONTEXTO DEL FALLO ANTERIOR Y CORRECCIÓN R1
+============================================================
+
+La primera verificación sobre e38999ad terminó FAIL porque PostgreSQL no completaba el provisionamiento Tenant al llegar al revision ID:
+
+0004_o4_milking_lifecycle_hardening
+
+Ese revision ID tiene 35 caracteres y Alembic crea por defecto:
+
+alembic_version.version_num VARCHAR(32)
+
+La evidencia primaria mostró que Alembic sí ejecutaba 0001 -> 0002 -> 0003 -> 0004, por lo que NO se modificó migrations/env.py ni la resolución dinámica del DSN.
+
+R1 mantiene el revision ID congelado y cambia únicamente:
+
+1) migrations/versions/0003_o4_milking_general.py
+   - amplía alembic_version.version_num VARCHAR(32) -> VARCHAR(128) durante upgrade 0003;
+   - restaura VARCHAR(32) en downgrade de 0003, cuando el destino vuelve a 0002.
+
+2) tests/test_o4_alembic_version_capacity.py
+   - prueba preventiva de capacidad de revision IDs.
+
+Delta técnico esperado desde el HEAD documental previo c7daeaee... hasta 6535bd8a...:
+- 2 commits;
+- 2 archivos;
+- migrations/versions/0003_o4_milking_general.py: +22/-0;
+- tests/test_o4_alembic_version_capacity.py: +35/-0.
+
+NO atribuyas automáticamente un fallo a migrations/env.py. Determina la causa solo desde traceback/log/evidencia primaria.
+
+============================================================
+3. INFRAESTRUCTURA DE VERIFICACIÓN — OBLIGATORIA Y LIMPIA
+============================================================
+
+NO reutilices bases parcialmente migradas de la primera verificación.
+Usa PostgreSQL de verificación aislado y recién creado.
+
+Debes disponer de CUATRO grupos lógicos de infraestructura:
+
+A) O-4 funcional/concurrencia
+Variable:
+O4_TEST_TENANT_DATABASES_JSON
+Debe contener >=2 Tenant UUID distintos, cada uno con PostgreSQL DB física distinta.
+
+B) Forward migration P-4 -> O-4
+Variable:
+O4_MIGRATION_TEST_TENANT_DATABASES_JSON
+Debe contener >=2 Tenant UUID distintos con DB físicas DEDICADAS a migración forward.
+No reutilices las DB del grupo A.
+
+C) Platform Identity P-3
+Variable:
+O4_TEST_IDENTITY_DATABASE_URL
+Debe apuntar a una PostgreSQL DB de Identity aislada.
+
+D) Regresión PostgreSQL histórica P-4
+Variable:
+P4_TEST_TENANT_DATABASES_JSON
+Debe contener >=2 Tenant UUID/DB físicas dedicadas para los tests P-4.
+No reutilices DB ya elevadas a O-4 si los tests P-4 esperan la revisión histórica 0002.
+
+Puedes usar contenedores PostgreSQL temporales creados específicamente para esta verificación.
+No borres ni renombres contenedores/volúmenes/bases ajenos.
+No uses datos productivos.
+Sanitiza credenciales en la evidencia.
+
+============================================================
+4. EVIDENCIAS
+============================================================
+
+Crear fuera del árbol versionado o en ruta ignorada:
+
+EVIDENCIAS_O4_R1_6535bd8a/
+  00_precheck/
+  01_patch_review/
+  02_static_review/
+  03_focal_tests/
+  04_alembic_capacity/
+  05_postgres/
+  06_concurrency/
+  07_forward_migration/
+  08_p3_integration/
+  09_p4_regression/
+  10_full_suite/
+  11_compile_startup/
+  12_docker_runtime/
+  13_postcheck/
+  Reporte_Reverificacion_O4_R1.md
+
+Comprimir al final:
+EVIDENCIAS_O4_R1_6535bd8a.zip
+
+Cada ejecución debe registrar:
+- comando exacto;
+- fecha/hora;
+- stdout;
+- stderr;
+- EXIT CODE NUMÉRICO REAL (0, 1, etc.).
+
+PROHIBIDO usar `True/False` de PowerShell como sustituto del exit code.
+En PowerShell captura `$LASTEXITCODE` inmediatamente después del comando cuando corresponda.
+
+Los conteos de tests deben obtenerse del XML JUnit real y contrastarse con stdout; si discrepan, reporta la discrepancia.
+
+============================================================
+5. PRECHECK GIT
+============================================================
+
+Registrar:
+
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git rev-parse 6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+git merge-base 8cdd0ee47db9569ca6fcec4530f3c3dffb9390ed 6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+git rev-list --left-right --count 8cdd0ee47db9569ca6fcec4530f3c3dffb9390ed...6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+git diff --name-status 6535bd8a22781e6a3043369f9f4c95e2c6d6fd40..HEAD
+git diff --check 8cdd0ee47db9569ca6fcec4530f3c3dffb9390ed..HEAD
+
+Esperado:
+- rama correcta;
+- merge-base exacto = base autorizada;
+- working tree limpio;
+- cualquier commit posterior a 6535bd8a exclusivamente documental de congelamiento/verificación.
+
+Si hay cambio ejecutable posterior al HEAD técnico: FAIL_VERIFICATION.
+
+============================================================
+6. REVISIÓN DEL MICRO-PARCHE R1
+============================================================
+
+Ejecuta:
+
+git diff --stat c7daeaeea17b7c09ef704e95ab6eab926fd7bb39..6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+git diff --name-status c7daeaeea17b7c09ef704e95ab6eab926fd7bb39..6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+git diff c7daeaeea17b7c09ef704e95ab6eab926fd7bb39..6535bd8a22781e6a3043369f9f4c95e2c6d6fd40 -- migrations/versions/0003_o4_milking_general.py tests/test_o4_alembic_version_capacity.py
+
+Debe confirmar exactamente el alcance descrito en la sección 2.
+
+Verifica que NO se modificó:
+- migrations/env.py;
+- 0004_o4_milking_lifecycle_hardening.py;
+- dominio/API/repositorios/modelos;
+- P-3/P-4.
+
+============================================================
+7. GATE ALEMBIC CAPACITY — NUEVO Y BLOQUEANTE
+============================================================
+
+Ejecuta primero:
+
+python -m pytest tests/test_o4_alembic_version_capacity.py tests/test_o4_milking_migration_chain.py -vv --junitxml=<evidencia>/alembic_capacity.xml
+
+Luego en PostgreSQL real demuestra físicamente:
+
+1. después de llegar a 0003, `alembic_version.version_num` tiene capacidad >=128;
+2. después de upgrade a head, `alembic_version.version_num` contiene exactamente:
+   `0004_o4_milking_lifecycle_hardening`;
+3. `TenantMigrationRunner.current_revision()` devuelve exactamente ese revision ID;
+4. `TenantProvisioner.provision()` devuelve exactamente ese revision ID;
+5. `platform_tenant_metadata.schema_version` guarda exactamente ese revision ID;
+6. repetir provisionamiento es idempotente y no falla.
+
+Recopila introspection/SQL de `information_schema.columns` mostrando `character_maximum_length` de `alembic_version.version_num`.
+
+Este gate debe ejecutarse al menos en las 2 DB del grupo de forward migration.
+
+============================================================
+8. REVISIÓN ESTÁTICA COMPLETA O-4
+============================================================
+
+Revisar diff base autorizada -> HEAD técnico R1:
+
+8cdd0ee47db9569ca6fcec4530f3c3dffb9390ed..6535bd8a22781e6a3043369f9f4c95e2c6d6fd40
+
+Contrastar código productivo, migraciones, tests, API, modelos, repositorios y runtime.
+
+Verificar:
+- Farm es referencia externa, no `milking_farms`;
+- no maestros sombra Product/UoM;
+- no Site/OperationalUnit/ProductionUnit/Plant/Facility/Branch/Warehouse/Location como jerarquía Milking;
+- no Organization cloud obligatoria;
+- MilkingOutput no es stock;
+- Purchase/Logistics/Reception/Quality/Inventory no absorbidos;
+- Tenant/Company/actor derivados de P-3;
+- API rechaza autoridad enviada por payload;
+- deny-by-default;
+- todos los mutantes usan P-4;
+- no command execution/audit técnico paralelo;
+- NUMERIC/Decimal, no FLOAT/DOUBLE/REAL para cantidades;
+- identidad activa Company+Farm+Date+Shift;
+- CANCELLED libera identidad;
+- Output 0..1;
+- business audit append-only;
+- no Outbox/Inbox O-4;
+- CAS explícito;
+- transacción Tenant única;
+- endpoints específicos, sin `/commands` genérico;
+- queries Company-scoped;
+- cambios en tests P-2/P-4 solo preservan regresiones históricas y `head` productivo sigue default.
+
+Hallazgos: BLOCKER/HIGH/MEDIUM/LOW/NONE.
+Cualquier BLOCKER/HIGH contractual = FAIL_VERIFICATION.
+
+============================================================
+9. FOCALES O-4 SIN POSTGRESQL
+============================================================
+
+Ejecuta todos los tests O-4 no PostgreSQL, incluyendo como mínimo:
+
+- tests/test_o4_alembic_version_capacity.py
+- tests/test_o4_milking_domain.py
+- tests/test_o4_milking_configuration.py
+- tests/test_o4_milking_service.py
+- tests/test_o4_milking_admin.py
+- tests/test_o4_milking_admin_validation.py
+- tests/test_o4_milking_api.py
+- tests/test_o4_milking_schema.py
+- tests/test_o4_milking_migration_chain.py
+
+Genera XML JUnit.
+Skips inesperados se reportan.
+
+============================================================
+10. POSTGRESQL O-4 REAL
+============================================================
+
+Con `O4_TEST_TENANT_DATABASES_JSON` configurado con >=2 DB físicas limpias, ejecutar al menos:
+
+python -m pytest tests/test_o4_milking_postgres.py tests/test_o4_milking_postgres_races.py -vv --junitxml=<evidencia>/o4_postgres.xml
+
+No aceptar setup errors ni skips.
+
+Verifica físicamente tablas, FK, índices parciales, UNIQUE Output por Session, NUMERIC, business audit y ausencia de maestros sombra.
+
+============================================================
+11. FORWARD MIGRATION REAL
+============================================================
+
+Con `O4_MIGRATION_TEST_TENANT_DATABASES_JSON` y 2 DB dedicadas limpias:
+
+python -m pytest tests/test_o4_milking_forward_migration_postgres.py -vv --junitxml=<evidencia>/o4_forward.xml
+
+Demostrar en ambas DB:
+
+0001_p2_tenant_company
+-> 0002_p4_command_execution
+-> 0003_o4_milking_general
+-> 0004_o4_milking_lifecycle_hardening
+
+Guardar revisión antes/después, capacidad de version_num, tablas/constraints e identidad Tenant metadata.
+
+Repetir `provision()` a head y comprobar idempotencia.
+
+============================================================
+12. P-3 REAL END-TO-END
+============================================================
+
+Con:
+- `O4_TEST_IDENTITY_DATABASE_URL` PostgreSQL real aislada;
+- `O4_TEST_TENANT_DATABASES_JSON` activo;
+
+ejecutar:
+
+python -m pytest tests/test_o4_milking_p3_api_integration.py -vv --junitxml=<evidencia>/o4_p3.xml
+
+Debe demostrar:
+- PlatformMigrationRunner real;
+- Identity DB separada;
+- user/membership/company access;
+- 9 capabilities milking.* por APIs P-3 genéricas;
+- RoleScope.COMPANY;
+- JWT operacional Tenant+Company;
+- endpoint O-4 autorizado;
+- actor correcto;
+- deny-by-default sin permisos.
+
+No sustituir con principal fake.
+
+============================================================
+13. CONCURRENCIA / STRESS
+============================================================
+
+Deben verificarse TODOS:
+
+1. CREATE concurrente misma Company+Farm+Date+Shift -> máximo 1 ganador;
+2. Farms distintas mismo Date+Shift -> ambos válidos;
+3. mismo command_id concurrente -> máximo 1 efecto;
+4. mismo command_id + payload distinto -> IDEMPOTENCY_CONFLICT;
+5. dos updates mismo expectedVersion -> máximo 1 ganador;
+6. CONFIRM concurrente -> máximo un DONE y 0..1 Output;
+7. replay CONFIRM -> no duplica Output ni business audit;
+8. CONFIRM vs CANCEL -> una transición válida y conflicto explícito;
+9. aislamiento Companies;
+10. aislamiento Tenant DB;
+11. carreras administrativas presentes en test_o4_milking_postgres_races.py.
+
+Para carreras repetibles: >=5 iteraciones o demuestra que el test ya ejecuta >=5 internamente.
+Guarda resultado por iteración.
+
+============================================================
+14. ROLLBACK / IDEMPOTENCIA / AUDIT
+============================================================
+
+Comprobar físicamente:
+- rollback no deja session/output/audit/claim P-4 parcial;
+- replay devuelve resultado almacenado sin duplicar efecto;
+- idempotency conflict no muta negocio;
+- audit funcional no se duplica en replay;
+- P-4 sigue siendo única autoridad técnica;
+- Output 0..1 por Session.
+
+============================================================
+15. REGRESIÓN POSTGRESQL P-4 — SIN SKIPS
+============================================================
+
+Configura `P4_TEST_TENANT_DATABASES_JSON` con >=2 DB PostgreSQL dedicadas limpias y ejecuta los tests PostgreSQL P-4 relevantes, incluyendo `tests/test_p4_postgres.py`.
+
+Genera XML JUnit separado.
+
+Objetivo:
+- preservar P-4;
+- confirmar que el pin histórico a 0002 funciona;
+- 0 skips por falta de `P4_TEST_TENANT_DATABASES_JSON`.
+
+No reutilices DB O-4 ya migradas a 0004 si el test requiere 0002.
+
+============================================================
+16. SUITE COMPLETA
+============================================================
+
+Con TODAS las variables reales activas:
+- O4_TEST_TENANT_DATABASES_JSON
+- O4_MIGRATION_TEST_TENANT_DATABASES_JSON
+- O4_TEST_IDENTITY_DATABASE_URL
+- P4_TEST_TENANT_DATABASES_JSON
+
+ejecuta:
+
+python -m pytest -vv --junitxml=<evidencia>/full_suite.xml
+
+Reporta desde XML:
+- tests;
+- passed;
+- failures;
+- errors;
+- skipped;
+- duración.
+
+Revisa y enumera CADA skip.
+Un gate obligatorio O-4/P-4 skippeado por falta de infraestructura impide PASS.
+
+No presupongas un total exacto de tests; usa el XML real.
+
+============================================================
+17. COMPILE / IMPORT / STARTUP
+============================================================
+
+Ejecutar:
+
+python -m compileall app
+
+Y un import/startup real de `create_app` con configuración test válida.
+Registrar exit codes numéricos.
+
+============================================================
+18. DOCKER BUILD / RUN / READINESS REAL
+============================================================
+
+Construye Docker desde el snapshot R1.
+
+Para el container usa infraestructura PostgreSQL real de verificación y variables de runtime coherentes con `Settings.from_environment`, como mínimo:
+- ERP_ENV=test
+- DATABASE_URL=<PostgreSQL Identity/readiness de verificación>
+- TENANT_DATABASES_JSON=<Tenant DB(s) de verificación>
+- JWT_SIGNING_SECRET=<secreto efímero de >=32 bytes, NO incluir valor en evidencia>
+
+Ejecuta:
+- Docker build;
+- Docker run;
+- GET /api/v1/health;
+- GET /api/v1/live;
+- GET /api/v1/ready.
+
+Resultado requerido para PASS:
+- build PASS;
+- container activo;
+- `/live` HTTP 200;
+- `/health` no degradado por DB unavailable;
+- `/ready` HTTP 200 con DB real accesible.
+
+Guardar logs sanitizados y respuestas HTTP.
+No exponer DSN, password, JWT secret ni tokens.
+
+============================================================
+19. RESIDUOS / SEGURIDAD
+============================================================
+
+Buscar en app/, migrations/ y API:
+Site
+OperationalUnit
+ProductionUnit
+Plant
+Facility
+Branch
+Warehouse
+Location
+organization_id como autoridad Milking
+milking_farms
+milking_products
+milking_uoms
+milking_command_executions
+milking_outbox
+milking_inbox
+/commands
+Float/REAL/DOUBLE para cantidades Milking
+tenant_id/company_id/actor_id confiados desde payload
+secretos hardcodeados
+
+Clasifica matches; apariciones documentales/tests negativos no son automáticamente fallo.
+
+============================================================
+20. POSTCHECK GIT
+============================================================
+
+Registrar:
+
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git diff --check 8cdd0ee47db9569ca6fcec4530f3c3dffb9390ed..HEAD
+git diff --name-status 6535bd8a22781e6a3043369f9f4c95e2c6d6fd40..HEAD
+
+El agente no debe modificar archivos versionados.
+Artefactos generados por su propia ejecución pueden limpiarse solo si es seguro y no eran preexistentes.
+
+============================================================
+21. REPORTE FINAL
+============================================================
+
+Genera `Reporte_Reverificacion_O4_R1.md` con:
+
+1. Identificación: repo, branch, base, HEAD técnico 6535bd8a, HEAD documental, fecha, SO, versiones Python/pytest/PostgreSQL/Docker.
+2. Resultado global: PASS_VERIFICATION / FAIL_VERIFICATION / BLOCKED_VERIFICATION.
+3. Resumen cuantitativo por gate desde XML/logs.
+4. Revisión del parche R1.
+5. Hallazgos estáticos con severidad y archivo/línea.
+6. Alembic capacity: longitud real de version_num, revisión almacenada, metadata Tenant.
+7. PostgreSQL O-4.
+8. Forward migration.
+9. P-3 end-to-end.
+10. Concurrencia/stress por escenario/iteración.
+11. P-4 regression.
+12. Full suite y lista completa de skips.
+13. Compile/startup.
+14. Docker health/live/ready.
+15. Git postcheck.
+16. Conclusión del agente.
+
+NO escribir “O-4 queda cerrado”. El agente solo verifica.
+
+============================================================
+22. CRITERIO ESTRICTO PASS_VERIFICATION
+============================================================
+
+Solo PASS si simultáneamente:
+- genealogía/snapshot correctos;
+- delta R1 exacto;
+- Alembic capacity gate PASS y version_num >=128;
+- revision DB exacta = 0004_o4_milking_lifecycle_hardening;
+- revisión estática sin BLOCKER/HIGH contractual;
+- focales PASS;
+- PostgreSQL O-4 real PASS con >=2 Tenant DB;
+- forward migration PASS en >=2 DB dedicadas;
+- P-3 real end-to-end PASS;
+- todos los escenarios de concurrencia PASS;
+- rollback/idempotencia/audit PASS;
+- regresión PostgreSQL P-4 PASS sin skips de infraestructura;
+- suite completa PASS;
+- XML JUnit 0 failures / 0 errors;
+- ningún skip obligatorio;
+- compile/import/startup PASS;
+- Docker build/run PASS;
+- health/live/ready PASS con PostgreSQL real;
+- evidencia sin secretos;
+- postcheck Git limpio;
+- ninguna discrepancia contrato/código.
+
+Un `pytest exit 0`, `BUILD SUCCESSFUL` o informe narrativo sin XML/logs no basta.
+
+============================================================
+23. ENTREGA
+============================================================
+
+Entrega:
+1. `EVIDENCIAS_O4_R1_6535bd8a.zip`
+2. `Reporte_Reverificacion_O4_R1.md`
+3. resumen breve con clasificación, conteos reales, PostgreSQL, migration, concurrencia, P-3, P-4, Docker y SHA verificado.
+
+NO modifiques Git remoto.
+NO cierres PR #8.
+NO inicies O-5.
+NO recomiendes merge por autoridad propia.
+
+FIN DEL PROMPT.
