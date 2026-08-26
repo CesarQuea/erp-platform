@@ -12,12 +12,18 @@ from app.platform.tenancy.context import TenantContext
 from app.platform.tenancy.registry import TenantConnectionConfig
 
 
+_P4_HEAD = "0002_p4_command_execution"
+
+
 def _provision(path: Path, tenant_id):
     database_url = f"sqlite+pysqlite:///{path}"
     registry = EnvironmentTenantRegistry(
         {tenant_id: TenantConnectionConfig(tenant_id, database_url)}
     )
-    runner = TenantMigrationRunner(repository_root=Path(__file__).resolve().parents[1])
+    runner = TenantMigrationRunner(
+        repository_root=Path(__file__).resolve().parents[1],
+        target_revision=_P4_HEAD,
+    )
     revision = TenantProvisioner(registry, migration_runner=runner).provision(
         TenantContext(tenant_id)
     )
@@ -29,7 +35,7 @@ def test_p4_migration_is_applied_to_two_independent_tenant_databases(tmp_path: P
     url_a, revision_a = _provision(tmp_path / "tenant-a.db", tenant_a)
     url_b, revision_b = _provision(tmp_path / "tenant-b.db", tenant_b)
 
-    assert revision_a == revision_b == "0002_p4_command_execution"
+    assert revision_a == revision_b == _P4_HEAD
     for url in (url_a, url_b):
         engine = create_engine(url)
         try:

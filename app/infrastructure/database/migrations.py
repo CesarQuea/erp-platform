@@ -14,12 +14,21 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 class TenantMigrationRunner:
-    def __init__(self, *, repository_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        repository_root: Path | None = None,
+        target_revision: str = "head",
+    ) -> None:
+        normalized_target = target_revision.strip()
+        if not normalized_target:
+            raise ValueError("target_revision cannot be blank")
         self._repository_root = repository_root or _REPOSITORY_ROOT
+        self._target_revision = normalized_target
 
     def upgrade(self, database_url: str) -> None:
         config = self._config(database_url)
-        command.upgrade(config, "head")
+        command.upgrade(config, self._target_revision)
 
     def current_revision(self, database_url: str) -> str | None:
         engine = create_engine(normalize_database_url(database_url), pool_pre_ping=True)

@@ -10,6 +10,7 @@ from app.bootstrap.identity_platform import (
     IdentityPlatformRuntime,
     build_identity_platform,
 )
+from app.bootstrap.milking_platform import MilkingPlatformRuntime, build_milking_platform
 from app.bootstrap.tenant_platform import TenantPlatformRuntime, build_tenant_platform
 from app.core.config.settings import Settings, get_settings
 from app.core.errors.handlers import install_exception_handlers
@@ -24,6 +25,10 @@ IdentityPlatformRuntimeFactory = Callable[
     [Settings, TenantPlatformRuntime],
     IdentityPlatformRuntime | None,
 ]
+MilkingPlatformRuntimeFactory = Callable[
+    [TenantPlatformRuntime],
+    MilkingPlatformRuntime | None,
+]
 
 
 def create_app(
@@ -32,6 +37,7 @@ def create_app(
     database_runtime_factory: DatabaseRuntimeFactory = DatabaseRuntime,
     tenant_platform_factory: TenantPlatformRuntimeFactory = build_tenant_platform,
     identity_platform_factory: IdentityPlatformRuntimeFactory = build_identity_platform,
+    milking_platform_factory: MilkingPlatformRuntimeFactory = build_milking_platform,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     configure_logging(resolved_settings.log_level)
@@ -41,18 +47,23 @@ def create_app(
         database_runtime = database_runtime_factory(resolved_settings)
         tenant_platform: TenantPlatformRuntime | None = None
         identity_platform: IdentityPlatformRuntime | None = None
+        milking_platform: MilkingPlatformRuntime | None = None
         try:
             tenant_platform = tenant_platform_factory(resolved_settings)
             identity_platform = identity_platform_factory(
                 resolved_settings,
                 tenant_platform,
             )
+            milking_platform = milking_platform_factory(tenant_platform)
             app.state.settings = resolved_settings
             app.state.database_runtime = database_runtime
             app.state.tenant_platform = tenant_platform
             app.state.identity_platform = identity_platform
+            app.state.milking_platform = milking_platform
             yield
         finally:
+            if milking_platform is not None:
+                milking_platform.dispose()
             if identity_platform is not None:
                 identity_platform.dispose()
             if tenant_platform is not None:
@@ -61,7 +72,7 @@ def create_app(
 
     app = FastAPI(
         title=resolved_settings.app_name,
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
     app.add_middleware(CorrelationIdMiddleware)

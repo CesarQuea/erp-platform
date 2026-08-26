@@ -30,6 +30,7 @@ from app.platform.tenancy.registry import TenantConnectionConfig
 
 
 _TEST_ENV = "P4_TEST_TENANT_DATABASES_JSON"
+_P4_HEAD = "0002_p4_command_execution"
 
 
 def _postgres_entries() -> list[tuple[UUID, str]]:
@@ -61,10 +62,13 @@ def postgres_runtime():
             for tenant_id, url in entries
         }
     )
-    runner = TenantMigrationRunner(repository_root=Path(__file__).resolve().parents[1])
+    runner = TenantMigrationRunner(
+        repository_root=Path(__file__).resolve().parents[1],
+        target_revision=_P4_HEAD,
+    )
     provisioner = TenantProvisioner(registry, migration_runner=runner)
     for tenant_id, _ in entries:
-        assert provisioner.provision(TenantContext(tenant_id)) == "0002_p4_command_execution"
+        assert provisioner.provision(TenantContext(tenant_id)) == _P4_HEAD
 
     scope = TenantSessionScope()
     resolver = SqlAlchemyTenantDataSourceResolver(registry)
