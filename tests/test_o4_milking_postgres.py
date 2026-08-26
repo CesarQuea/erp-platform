@@ -191,7 +191,14 @@ def _seed_configuration(runtime, *, tenant_id: UUID, company_id: UUID, farm_id: 
     return principal
 
 
-def _create_session(runtime, *, principal, farm_id: UUID, command_id: UUID | None = None):
+def _create_session(
+    runtime,
+    *,
+    principal,
+    farm_id: UUID,
+    command_id: UUID | None = None,
+    client_occurred_at: datetime | None = None,
+):
     return runtime.commands.create_session(
         CreateMilkingSession(
             command_id=command_id or uuid4(),
@@ -199,7 +206,7 @@ def _create_session(runtime, *, principal, farm_id: UUID, command_id: UUID | Non
             milking_date=date(2026, 8, 25),
             shift_code="MORNING",
             operator_id=None,
-            client_occurred_at=datetime.now(UTC),
+            client_occurred_at=client_occurred_at or datetime.now(UTC),
             client_instance_id="pytest",
         ),
         principal=principal,
@@ -327,9 +334,22 @@ def test_o4_same_create_command_replays_same_session_without_duplicate_audit(o4_
     farm_id = uuid4()
     principal = _seed_configuration(runtime, tenant_id=tenant_id, company_id=company_id, farm_id=farm_id)
     command_id = uuid4()
+    occurred_at = datetime.now(UTC)
 
-    first = _create_session(runtime, principal=principal, farm_id=farm_id, command_id=command_id)
-    second = _create_session(runtime, principal=principal, farm_id=farm_id, command_id=command_id)
+    first = _create_session(
+        runtime,
+        principal=principal,
+        farm_id=farm_id,
+        command_id=command_id,
+        client_occurred_at=occurred_at,
+    )
+    second = _create_session(
+        runtime,
+        principal=principal,
+        farm_id=farm_id,
+        command_id=command_id,
+        client_occurred_at=occurred_at,
+    )
 
     assert first.replayed is False
     assert second.replayed is True
