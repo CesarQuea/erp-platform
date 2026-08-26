@@ -16,6 +16,18 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic creates alembic_version.version_num as VARCHAR(32) by default.
+    # O-4 intentionally keeps descriptive revision identifiers, including the
+    # 35-character 0004_o4_milking_lifecycle_hardening revision. Expand the
+    # internal version column before Alembic attempts to persist that revision.
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=32),
+        type_=sa.String(length=128),
+        existing_nullable=False,
+    )
+
     op.create_table(
         "milking_output_profiles",
         sa.Column("profile_id", sa.Uuid(), nullable=False),
@@ -390,3 +402,13 @@ def downgrade() -> None:
 
     op.drop_index("ix_milking_profile_company_active", table_name="milking_output_profiles")
     op.drop_table("milking_output_profiles")
+
+    # Downgrading 0003 leaves a <=32-character revision (0002), so restore the
+    # Alembic default width after all O-4 objects have been removed.
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=128),
+        type_=sa.String(length=32),
+        existing_nullable=False,
+    )
