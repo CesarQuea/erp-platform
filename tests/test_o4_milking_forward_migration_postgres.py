@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from alembic import command
 from sqlalchemy import inspect, select
 
 from app.infrastructure.database.migrations import TenantMigrationRunner
@@ -57,8 +58,16 @@ def test_forward_migration_p4_to_o4_on_two_physical_tenant_databases() -> None:
         repository_root=root,
         target_revision=_P4_HEAD,
     )
-    p4_provisioner = TenantProvisioner(registry, migration_runner=p4_runner)
 
+    # Dedicated verification databases may be reused across runs and may already
+    # be at O-4/P-5. Restore the exact historical P-4 starting point before
+    # proving the original P-4 -> O-4 migration path.
+    for _, url in entries:
+        current = p4_runner.current_revision(url)
+        if current is not None and current != _P4_HEAD:
+            command.downgrade(p4_runner._config(url), _P4_HEAD)
+
+    p4_provisioner = TenantProvisioner(registry, migration_runner=p4_runner)
     for tenant_id, url in entries:
         context = TenantContext(tenant_id)
         assert p4_provisioner.provision(context) == _P4_HEAD
