@@ -27,6 +27,18 @@ class CommandResponse(BaseModel):
     data: dict[str, object]
 
 
+COMMON_ERROR_RESPONSES: dict[int, dict[str, object]] = {
+    400: {"model": ErrorResponse, "description": "Invalid request or domain validation failure."},
+    401: {"model": ErrorResponse, "description": "Authentication failed."},
+    403: {"model": ErrorResponse, "description": "Access denied."},
+    404: {"model": ErrorResponse, "description": "Requested resource or module is not available."},
+    409: {"model": ErrorResponse, "description": "Idempotency, concurrency, state or activation conflict."},
+    422: {"model": ErrorResponse, "description": "Request validation failed."},
+    500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    503: {"model": ErrorResponse, "description": "Required platform capability is unavailable."},
+}
+
+
 def command_response(outcome: CommandExecutionOutcome) -> CommandResponse:
     return CommandResponse(
         code=outcome.result.code,
