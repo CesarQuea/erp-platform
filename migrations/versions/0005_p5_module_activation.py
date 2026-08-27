@@ -34,7 +34,7 @@ def upgrade() -> None:
             name="ck_module_activation_version_positive",
         ),
         sa.CheckConstraint(
-            "char_length(trim(module_id)) > 0",
+            "length(trim(module_id)) > 0",
             name="ck_module_activation_module_id_required",
         ),
         sa.ForeignKeyConstraint(
