@@ -21,7 +21,7 @@ class ModuleActivationRecord(Base):
             name="ck_module_activation_version_positive",
         ),
         CheckConstraint(
-            "char_length(trim(module_id)) > 0",
+            "length(trim(module_id)) > 0",
             name="ck_module_activation_module_id_required",
         ),
     )
