@@ -43,7 +43,12 @@ def _identity_url() -> str:
     return value
 
 
-def _select_context(client: TestClient, global_token: str, tenant_id: UUID, company_id: UUID) -> dict[str, str]:
+def _select_context(
+    client: TestClient,
+    global_token: str,
+    tenant_id: UUID,
+    company_id: UUID,
+) -> dict[str, str]:
     selected = client.post(
         "/api/v1/auth/context",
         headers={"Authorization": f"Bearer {global_token}"},
@@ -96,6 +101,14 @@ def test_real_p6_module_api_and_enforcement_are_tenant_company_isolated() -> Non
                 )
             )
 
+        tenant_a, tenant_b = tenants[0][0], tenants[1][0]
+        company_a, company_b = companies
+        company_a2 = tenant_runtime.company_service.register_company(
+            TenantContext(tenant_a),
+            code=f"P6-A2-{suffix}",
+            legal_name=f"P-6 Same Tenant Isolation Company {suffix}",
+        )
+
         provisioning = app.state.identity_platform.provisioning
         user = provisioning.create_user(
             login=login_name,
@@ -105,6 +118,7 @@ def test_real_p6_module_api_and_enforcement_are_tenant_company_isolated() -> Non
         for (tenant_id, _), company in zip(tenants, companies, strict=True):
             provisioning.grant_membership(user.id, tenant_id)
             provisioning.grant_company_access(user.id, tenant_id, company.id)
+        provisioning.grant_company_access(user.id, tenant_a, company_a2.id)
 
         permissions = [
             provisioning.ensure_permission(
@@ -127,6 +141,12 @@ def test_real_p6_module_api_and_enforcement_are_tenant_company_isolated() -> Non
                 tenant_id=tenant_id,
                 company_id=company.id,
             )
+        provisioning.assign_role(
+            user.id,
+            role.id,
+            tenant_id=tenant_a,
+            company_id=company_a2.id,
+        )
 
         login = client.post(
             "/api/v1/auth/login",
@@ -135,16 +155,18 @@ def test_real_p6_module_api_and_enforcement_are_tenant_company_isolated() -> Non
         assert login.status_code == 200
         global_token = login.json()["access_token"]
 
-        tenant_a, tenant_b = tenants[0][0], tenants[1][0]
-        company_a, company_b = companies
         headers_a = _select_context(client, global_token, tenant_a, company_a.id)
+        headers_a2 = _select_context(client, global_token, tenant_a, company_a2.id)
         headers_b = _select_context(client, global_token, tenant_b, company_b.id)
 
         status_a = _milking_status(client, headers_a)
+        status_a2 = _milking_status(client, headers_a2)
         status_b = _milking_status(client, headers_b)
         assert status_a["state"] == "DISABLED" and status_a["version"] == 0
+        assert status_a2["state"] == "DISABLED" and status_a2["version"] == 0
         assert status_b["state"] == "DISABLED" and status_b["version"] == 0
         assert not status_a["activation_present"]
+        assert not status_a2["activation_present"]
         assert not status_b["activation_present"]
 
         blocked = client.get("/api/v1/milking/sessions", headers=headers_a)
@@ -189,6 +211,13 @@ def test_real_p6_module_api_and_enforcement_are_tenant_company_isolated() -> Non
         allowed = client.get("/api/v1/milking/sessions", headers=headers_a)
         assert allowed.status_code == 200
         assert allowed.json() == []
+
+        same_tenant_isolated = _milking_status(client, headers_a2)
+        assert same_tenant_isolated["state"] == "DISABLED"
+        assert same_tenant_isolated["version"] == 0
+        blocked_a2 = client.get("/api/v1/milking/sessions", headers=headers_a2)
+        assert blocked_a2.status_code == 409
+        assert blocked_a2.json()["error"]["code"] == "MODULE_NOT_ENABLED"
 
         still_isolated_b = _milking_status(client, headers_b)
         assert still_isolated_b["state"] == "DISABLED"
