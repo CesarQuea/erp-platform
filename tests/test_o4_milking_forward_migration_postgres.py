@@ -72,7 +72,10 @@ def test_forward_migration_p4_to_o4_on_two_physical_tenant_databases() -> None:
         finally:
             engine.dispose()
 
-    o4_runner = TenantMigrationRunner(repository_root=root)
+    o4_runner = TenantMigrationRunner(
+        repository_root=root,
+        target_revision=_O4_HEAD,
+    )
     o4_provisioner = TenantProvisioner(registry, migration_runner=o4_runner)
     for tenant_id, url in entries:
         context = TenantContext(tenant_id)
