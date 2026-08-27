@@ -22,8 +22,12 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Generate OpenAPI baseline
         run: python scripts/generate_openapi.py
+      - name: Verify committed OpenAPI baseline
+        run: git diff --exit-code -- contracts/api/v1/openapi.json
       - name: Compile
         run: python -m compileall -q app scripts tests
+      - name: Run P-6 focal tests
+        run: python -m pytest -q tests/test_p6_api_contracts.py tests/test_p6_module_api.py tests/test_o4_milking_api.py
       - name: Upload generated baseline
         uses: actions/upload-artifact@v4
         with:
