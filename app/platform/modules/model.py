@@ -19,6 +19,11 @@ _SEMVER_RE = re.compile(
 )
 
 
+def validate_module_id(module_id: str) -> None:
+    if not isinstance(module_id, str) or not _MODULE_ID_RE.fullmatch(module_id):
+        raise ValueError("module_id must match ^[a-z][a-z0-9_]{0,63}$")
+
+
 class ModuleActivationState(StrEnum):
     ENABLED = "ENABLED"
     DISABLED = "DISABLED"
@@ -32,12 +37,7 @@ class ModuleDefinition:
     description: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.module_id, str) or not _MODULE_ID_RE.fullmatch(
-            self.module_id
-        ):
-            raise ValueError(
-                "module_id must match ^[a-z][a-z0-9_]{0,63}$"
-            )
+        validate_module_id(self.module_id)
         if not isinstance(self.module_version, str) or not _SEMVER_RE.fullmatch(
             self.module_version
         ):
@@ -79,11 +79,49 @@ class CompanyModuleActivation:
             raise TypeError("version must be an int")
         if self.version < 1:
             raise ValueError("persisted activation version must be positive")
-        if not _MODULE_ID_RE.fullmatch(self.module_id):
-            raise ValueError("module_id is invalid")
+        validate_module_id(self.module_id)
         if self.created_at.tzinfo is None:
             raise ValueError("created_at must be timezone-aware")
         if self.updated_at is not None and self.updated_at.tzinfo is None:
             raise ValueError("updated_at must be timezone-aware")
         if (self.updated_at is None) != (self.updated_by is None):
             raise ValueError("updated_at and updated_by must be set together")
+
+
+@dataclass(frozen=True, slots=True)
+class ChangeModuleActivation:
+    command_id: UUID
+    module_id: str
+    expected_version: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.command_id, UUID):
+            raise TypeError("command_id must be a UUID")
+        validate_module_id(self.module_id)
+        if not isinstance(self.expected_version, int) or isinstance(
+            self.expected_version, bool
+        ):
+            raise TypeError("expected_version must be an int")
+        if self.expected_version < 0:
+            raise ValueError("expected_version cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyModuleStatus:
+    definition: ModuleDefinition
+    state: ModuleActivationState
+    version: int
+    activation_present: bool
+    effective_enabled: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state, ModuleActivationState):
+            raise TypeError("state must be a ModuleActivationState")
+        if not isinstance(self.version, int) or isinstance(self.version, bool):
+            raise TypeError("version must be an int")
+        if self.version < 0:
+            raise ValueError("version cannot be negative")
+        if not self.activation_present and self.version != 0:
+            raise ValueError("absent activation must have version 0")
+        if self.effective_enabled and self.state is not ModuleActivationState.ENABLED:
+            raise ValueError("effective enabled requires ENABLED state")
