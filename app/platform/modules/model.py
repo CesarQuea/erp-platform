@@ -46,6 +46,10 @@ class ModuleDefinition:
             self.configuration_namespace
         ):
             raise ValueError("configuration_namespace is invalid")
+        if self.configuration_namespace != self.module_id:
+            raise ValueError(
+                "P-5 v0.1 requires configuration_namespace to equal module_id"
+            )
         if self.description is not None:
             if not isinstance(self.description, str):
                 raise TypeError("description must be a string or None")
