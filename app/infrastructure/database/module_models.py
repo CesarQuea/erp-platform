@@ -24,6 +24,11 @@ class ModuleActivationRecord(Base):
             "length(trim(module_id)) > 0",
             name="ck_module_activation_module_id_required",
         ),
+        CheckConstraint(
+            "(version = 1 AND updated_at IS NULL AND updated_by IS NULL) OR "
+            "(version > 1 AND updated_at IS NOT NULL AND updated_by IS NOT NULL)",
+            name="ck_module_activation_update_metadata_consistent",
+        ),
     )
 
     company_id: Mapped[UUID] = mapped_column(
