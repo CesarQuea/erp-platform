@@ -10,7 +10,11 @@ from app.api.contracts import CommandResponse, command_response
 from app.api.security import current_principal, module_runtime, operational_principal
 from app.platform.identity.model import AuthenticatedPrincipal
 from app.platform.modules.errors import module_activation_not_available
-from app.platform.modules.model import ChangeModuleActivation, CompanyModuleStatus
+from app.platform.modules.model import (
+    ChangeModuleActivation,
+    CompanyModuleStatus,
+    ModuleActivationState,
+)
 from app.platform.tenancy.context import TenantContext
 
 
@@ -22,7 +26,7 @@ class ModuleStatusResponse(BaseModel):
     module_id: str
     module_version: str
     description: str | None
-    state: str
+    state: ModuleActivationState
     version: int
     activation_present: bool
     effective_enabled: bool
@@ -38,7 +42,7 @@ def _status_response(status: CompanyModuleStatus) -> ModuleStatusResponse:
         module_id=status.definition.module_id,
         module_version=status.definition.module_version,
         description=status.definition.description,
-        state=status.state.value,
+        state=status.state,
         version=status.version,
         activation_present=status.activation_present,
         effective_enabled=status.effective_enabled,
