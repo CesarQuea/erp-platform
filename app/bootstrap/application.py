@@ -83,7 +83,7 @@ def create_app(
 
     app = FastAPI(
         title=resolved_settings.app_name,
-        version="0.5.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
     app.add_middleware(CorrelationIdMiddleware)
