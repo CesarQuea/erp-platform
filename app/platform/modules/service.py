@@ -220,7 +220,6 @@ class ModuleActivationService:
         target_state: ModuleActivationState,
         principal: AuthenticatedPrincipal,
     ) -> CommandExecutionOutcome:
-        self._require_registered(command.module_id)
         request = CommandRequest(
             command_id=command.command_id,
             command_name=(
@@ -254,6 +253,7 @@ class ModuleActivationService:
         target_state: ModuleActivationState,
         principal: AuthenticatedPrincipal,
     ) -> CommandResult:
+        self._require_registered(command.module_id)
         company_id = self._company_id(principal)
         company = self._companies.get_by_id(company_id)
         if company is None or not company.is_active:
