@@ -50,17 +50,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("company_id", "module_id"),
     )
-    op.create_index(
-        "ix_module_activation_company_state",
-        "platform_module_activations",
-        ["company_id", "state"],
-        unique=False,
-    )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_module_activation_company_state",
-        table_name="platform_module_activations",
-    )
     op.drop_table("platform_module_activations")
