@@ -14,7 +14,7 @@ MAX_PAGE_LIMIT = 500
 class ErrorBody(BaseModel):
     code: str
     message: str
-    correlation_id: str | None
+    correlation_id: str
 
 
 class ErrorResponse(BaseModel):
