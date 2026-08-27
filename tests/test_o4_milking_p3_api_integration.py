@@ -18,6 +18,7 @@ from app.platform.tenancy.context import TenantContext
 
 _TENANT_ENV = "O4_TEST_TENANT_DATABASES_JSON"
 _IDENTITY_ENV = "O4_TEST_IDENTITY_DATABASE_URL"
+_CURRENT_TENANT_HEAD = "0005_p5_module_activation"
 _MILKING_PERMISSIONS = (
     "milking.session.create",
     "milking.session.update_draft",
@@ -79,8 +80,9 @@ def test_real_p3_operational_token_authorizes_o4_end_to_end() -> None:
 
     with TestClient(app) as client:
         tenant_runtime = app.state.tenant_platform
-        assert tenant_runtime.provisioner.provision(TenantContext(tenant_id)) == (
-            "0004_o4_milking_lifecycle_hardening"
+        assert (
+            tenant_runtime.provisioner.provision(TenantContext(tenant_id))
+            == _CURRENT_TENANT_HEAD
         )
         company = tenant_runtime.company_service.register_company(
             TenantContext(tenant_id),
@@ -211,7 +213,10 @@ def test_real_p3_context_without_milking_permission_is_denied_by_o4() -> None:
 
     with TestClient(app) as client:
         tenant_runtime = app.state.tenant_platform
-        tenant_runtime.provisioner.provision(TenantContext(tenant_id))
+        assert (
+            tenant_runtime.provisioner.provision(TenantContext(tenant_id))
+            == _CURRENT_TENANT_HEAD
+        )
         company = tenant_runtime.company_service.register_company(
             TenantContext(tenant_id),
             code=f"O4NO-{suffix}",
