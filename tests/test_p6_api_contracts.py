@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -14,6 +16,10 @@ from app.api.contracts import (
 )
 from app.bootstrap.application import create_app
 from app.core.config.settings import Settings
+
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+_OPENAPI_BASELINE = _REPOSITORY_ROOT / "contracts" / "api" / "v1" / "openapi.json"
 
 
 class FakeDatabaseRuntime:
@@ -85,6 +91,17 @@ def test_openapi_exposes_v1_modules_and_preserves_milking_without_sync_routes() 
     assert "ErrorResponse" in schemas
     assert "CommandResponse" in schemas
     assert "ModuleStatusResponse" in schemas
+    assert "description" in schemas["ModuleStatusResponse"]["properties"]
+
+    assert set(paths["/api/v1/live"]["get"]["responses"]) == {"200", "500"}
+    assert set(paths["/api/v1/ready"]["get"]["responses"]) == {"200", "500", "503"}
+    assert set(paths["/api/v1/health"]["get"]["responses"]) == {"200", "500"}
+
+
+def test_openapi_matches_versioned_v1_baseline_exactly() -> None:
+    assert _OPENAPI_BASELINE.is_file(), "Generate contracts/api/v1/openapi.json first"
+    baseline = json.loads(_OPENAPI_BASELINE.read_text(encoding="utf-8"))
+    assert _app().openapi() == baseline
 
 
 def test_correlation_header_is_preserved_and_validation_error_matches_body() -> None:
