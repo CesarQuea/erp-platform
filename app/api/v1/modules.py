@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Request
 from pydantic import BaseModel, Field
@@ -28,7 +29,7 @@ class ModuleStatusResponse(BaseModel):
 
 
 class ChangeModuleActivationRequest(BaseModel):
-    command_id: str
+    command_id: UUID
     expected_version: int = Field(ge=0)
 
 
