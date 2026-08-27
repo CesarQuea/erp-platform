@@ -77,8 +77,7 @@ class ModuleAvailabilityService:
         company_id: UUID,
         module_id: str,
     ) -> bool:
-        if not self._registry.contains(module_id):
-            return False
+        self._require_registered(module_id)
         boundary = self._transactions.for_tenant(context)
 
         def operation() -> bool:
@@ -130,6 +129,9 @@ class ModuleAvailabilityService:
                 activation.module_id: activation
                 for activation in self._activations.list_for_company(company_id)
             }
+            if any(not self._registry.contains(module_id) for module_id in activations):
+                raise module_not_registered()
+
             statuses: list[CompanyModuleStatus] = []
             for definition in self._registry.list():
                 activation = activations.get(definition.module_id)
