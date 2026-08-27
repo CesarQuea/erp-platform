@@ -107,10 +107,22 @@ class SqlAlchemyModuleActivationRepository:
                 "updated_by": updated_by,
             },
         )
-        updated = self.get(company_id=company_id, module_id=module_id)
-        if updated is None or updated.version != new_version:
+
+        # The activation is normally loaded immediately before CAS by the
+        # application service. Force an ORM refresh so the identity map cannot
+        # return that stale pre-CAS object after the Core UPDATE statement.
+        session = self._session_scope.current()
+        updated_record = session.scalar(
+            select(ModuleActivationRecord)
+            .where(
+                ModuleActivationRecord.company_id == company_id,
+                ModuleActivationRecord.module_id == module_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if updated_record is None or int(updated_record.version) != new_version:
             raise RuntimeError("module activation disappeared after compare-and-set")
-        return updated
+        return self._to_domain(updated_record)
 
     @staticmethod
     def _to_domain(record: ModuleActivationRecord) -> CompanyModuleActivation:
