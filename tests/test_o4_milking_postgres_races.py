@@ -45,6 +45,7 @@ from app.platform.tenancy.registry import TenantConnectionConfig
 
 
 _TEST_ENV = "O4_TEST_TENANT_DATABASES_JSON"
+_CURRENT_TENANT_HEAD = "0005_p5_module_activation"
 _PERMISSIONS = frozenset(
     {
         "milking.session.create",
@@ -83,7 +84,7 @@ def race_runtime():
             repository_root=Path(__file__).resolve().parents[1]
         ),
     )
-    assert provisioner.provision(TenantContext(tenant_id)) == "0004_o4_milking_lifecycle_hardening"
+    assert provisioner.provision(TenantContext(tenant_id)) == _CURRENT_TENANT_HEAD
 
     resolver = SqlAlchemyTenantDataSourceResolver(registry)
     company_scope = TenantSessionScope()
