@@ -310,7 +310,9 @@ def test_unknown_module_fails_closed_before_command_claim():
     tenant_id, company_id, command_repo, _, availability, activations = services()
     p = principal(tenant_id, company_id)
     assert not availability.is_registered("inventory")
-    assert not availability.is_enabled(TenantContext(tenant_id), company_id, "inventory")
+    with pytest.raises(PlatformError) as exc:
+        availability.is_enabled(TenantContext(tenant_id), company_id, "inventory")
+    assert exc.value.code == "MODULE_NOT_REGISTERED"
 
     with pytest.raises(PlatformError) as exc:
         activations.enable_module(
@@ -318,6 +320,22 @@ def test_unknown_module_fails_closed_before_command_claim():
         )
     assert exc.value.code == "MODULE_NOT_REGISTERED"
     assert command_repo.records == {}
+
+
+def test_orphan_activation_fails_closed_when_listing_company_modules():
+    tenant_id, company_id, _, activation_repo, availability, _ = services()
+    actor = uuid4()
+    activation_repo.records[(company_id, "inventory")] = CompanyModuleActivation(
+        company_id=company_id,
+        module_id="inventory",
+        state=ModuleActivationState.ENABLED,
+        version=1,
+        created_at=datetime(2026, 8, 26, 20, 0, tzinfo=timezone.utc),
+        created_by=actor,
+    )
+    with pytest.raises(PlatformError) as exc:
+        availability.list_company_modules(TenantContext(tenant_id), company_id)
+    assert exc.value.code == "MODULE_NOT_REGISTERED"
 
 
 def test_permission_is_independent_from_company_module_activation():
