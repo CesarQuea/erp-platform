@@ -20,15 +20,11 @@ from app.platform.modules.registry import (
 )
 
 
-def definition(
-    module_id: str = "inventory",
-    version: str = "1.0.0",
-    namespace: str | None = None,
-) -> ModuleDefinition:
+def definition(module_id: str = "inventory", version: str = "1.0.0") -> ModuleDefinition:
     return ModuleDefinition(
         module_id=module_id,
         module_version=version,
-        configuration_namespace=namespace or module_id,
+        configuration_namespace=module_id,
     )
 
 
@@ -36,7 +32,7 @@ def test_module_definition_accepts_semver_and_stable_identifiers():
     item = ModuleDefinition(
         module_id="inventory_core",
         module_version="1.2.3-rc.1+build.7",
-        configuration_namespace="inventory.core",
+        configuration_namespace="inventory_core",
         description="Inventory bounded context",
     )
     assert item.module_id == "inventory_core"
@@ -58,6 +54,15 @@ def test_module_definition_rejects_non_semver_versions(version: str):
         definition(version=version)
 
 
+def test_p5_v01_requires_configuration_namespace_to_equal_module_id():
+    with pytest.raises(ValueError):
+        ModuleDefinition(
+            module_id="inventory",
+            module_version="1.0.0",
+            configuration_namespace="stock",
+        )
+
+
 def test_registry_is_explicit_deterministic_and_frozen_after_bootstrap():
     registry = ModuleRegistry()
     registry.register(definition("sales"))
@@ -72,12 +77,10 @@ def test_registry_is_explicit_deterministic_and_frozen_after_bootstrap():
         registry.register(definition("manufacturing"))
 
 
-def test_registry_rejects_duplicate_ids_namespaces_and_unknown_modules():
-    registry = ModuleRegistry([definition("inventory", namespace="stock")])
+def test_registry_rejects_duplicate_ids_and_unknown_modules():
+    registry = ModuleRegistry([definition("inventory")])
     with pytest.raises(ModuleRegistryError):
-        registry.register(definition("inventory", "2.0.0", namespace="inventory"))
-    with pytest.raises(ModuleRegistryError):
-        registry.register(definition("warehouse", namespace="stock"))
+        registry.register(definition("inventory", "2.0.0"))
     with pytest.raises(ModuleNotRegisteredError):
         registry.get("sales")
 
