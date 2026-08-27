@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import TypeVar
 from uuid import UUID
 
+from app.core.errors.models import PlatformError
 from app.core.time.clock import Clock, SystemClock
 from app.platform.commands.errors import ConcurrencyConflictSignal
 from app.platform.commands.model import (
@@ -35,6 +37,15 @@ from app.platform.tenancy.transactions import TenantTransactionBoundaryFactory
 
 PERM_MANAGE_MODULES = "platform.modules.manage"
 _SCHEMA_VERSION = "1"
+T = TypeVar("T")
+
+
+class _ModuleAvailabilitySignal(RuntimeError):
+    """Mutable carrier for a frozen PlatformError while a transaction scope is active."""
+
+    def __init__(self, error: PlatformError) -> None:
+        super().__init__(error.code)
+        self.error = error
 
 
 class ModuleAvailabilityService:
@@ -63,13 +74,12 @@ class ModuleAvailabilityService:
         module_id: str,
     ) -> CompanyModuleActivation | None:
         self._require_registered(module_id)
-        boundary = self._transactions.for_tenant(context)
 
         def operation() -> CompanyModuleActivation | None:
             self._require_active_company(company_id)
             return self._activations.get(company_id=company_id, module_id=module_id)
 
-        return boundary.run(operation)
+        return self._run(context, operation)
 
     def is_enabled(
         self,
@@ -78,7 +88,6 @@ class ModuleAvailabilityService:
         module_id: str,
     ) -> bool:
         self._require_registered(module_id)
-        boundary = self._transactions.for_tenant(context)
 
         def operation() -> bool:
             company = self._companies.get_by_id(company_id)
@@ -93,7 +102,7 @@ class ModuleAvailabilityService:
                 and activation.state is ModuleActivationState.ENABLED
             )
 
-        return boundary.run(operation)
+        return self._run(context, operation)
 
     def require_enabled(
         self,
@@ -102,7 +111,6 @@ class ModuleAvailabilityService:
         module_id: str,
     ) -> ModuleDefinition:
         definition = self._require_registered(module_id)
-        boundary = self._transactions.for_tenant(context)
 
         def operation() -> None:
             self._require_active_company(company_id)
@@ -113,7 +121,7 @@ class ModuleAvailabilityService:
             if activation is None or activation.state is not ModuleActivationState.ENABLED:
                 raise module_not_enabled()
 
-        boundary.run(operation)
+        self._run(context, operation)
         return definition
 
     def list_company_modules(
@@ -121,8 +129,6 @@ class ModuleAvailabilityService:
         context: TenantContext,
         company_id: UUID,
     ) -> Sequence[CompanyModuleStatus]:
-        boundary = self._transactions.for_tenant(context)
-
         def operation() -> Sequence[CompanyModuleStatus]:
             self._require_active_company(company_id)
             activations = {
@@ -159,7 +165,25 @@ class ModuleAvailabilityService:
                     )
             return tuple(statuses)
 
-        return boundary.run(operation)
+        return self._run(context, operation)
+
+    def _run(self, context: TenantContext, operation: Callable[[], T]) -> T:
+        boundary = self._transactions.for_tenant(context)
+
+        def guarded_operation() -> T:
+            try:
+                return operation()
+            except PlatformError as error:
+                # PlatformError is intentionally frozen. Generator-based context
+                # managers assign traceback metadata while propagating exceptions,
+                # so carry it through the transaction using a mutable signal and
+                # re-raise the original contract error only after rollback/scope exit.
+                raise _ModuleAvailabilitySignal(error) from None
+
+        try:
+            return boundary.run(guarded_operation)
+        except _ModuleAvailabilitySignal as signal:
+            raise signal.error from None
 
     def _require_registered(self, module_id: str) -> ModuleDefinition:
         try:
