@@ -22,7 +22,12 @@ def generate_openapi_document() -> dict[str, object]:
 
 
 def render_openapi_document(document: dict[str, object]) -> str:
-    return json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    return json.dumps(
+        document,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ) + "\n"
 
 
 def main() -> None:
