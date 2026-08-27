@@ -19,6 +19,7 @@ from app.platform.tenancy.context import TenantContext
 _TENANT_ENV = "O4_TEST_TENANT_DATABASES_JSON"
 _IDENTITY_ENV = "O4_TEST_IDENTITY_DATABASE_URL"
 _CURRENT_TENANT_HEAD = "0005_p5_module_activation"
+_MODULE_MANAGE_PERMISSION = "platform.modules.manage"
 _MILKING_PERMISSIONS = (
     "milking.session.create",
     "milking.session.update_draft",
@@ -57,6 +58,21 @@ def _command_payload(**extra):
         "client_instance_id": "o4-p3-integration",
         **extra,
     }
+
+
+def _enable_milking(client: TestClient, headers: dict[str, str]) -> None:
+    modules = client.get("/api/v1/modules", headers=headers)
+    assert modules.status_code == 200
+    milking = next(item for item in modules.json() if item["module_id"] == "milking")
+    if milking["effective_enabled"]:
+        return
+    enabled = client.post(
+        "/api/v1/modules/milking/enable",
+        headers=headers,
+        json={"command_id": str(uuid4()), "expected_version": milking["version"]},
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["data"]["state"] == "ENABLED"
 
 
 def test_real_p3_operational_token_authorizes_o4_end_to_end() -> None:
@@ -103,7 +119,7 @@ def test_real_p3_operational_token_authorizes_o4_end_to_end() -> None:
 
         permissions = [
             provisioning.ensure_permission(code, description=f"O-4 verification {code}")
-            for code in _MILKING_PERMISSIONS
+            for code in (*_MILKING_PERMISSIONS, _MODULE_MANAGE_PERMISSION)
         ]
         role = provisioning.ensure_role(
             f"O4_MILKING_OPERATOR_{suffix}",
@@ -138,6 +154,8 @@ def test_real_p3_operational_token_authorizes_o4_end_to_end() -> None:
         assert me.status_code == 200
         assert me.json()["tenant_id"] == str(tenant_id)
         assert me.json()["company_id"] == str(company.id)
+
+        _enable_milking(client, headers)
 
         product_id, uom_id, farm_id = uuid4(), uuid4(), uuid4()
         profile = client.post(
@@ -231,6 +249,23 @@ def test_real_p3_context_without_milking_permission_is_denied_by_o4() -> None:
         provisioning.grant_membership(user.id, tenant_id)
         provisioning.grant_company_access(user.id, tenant_id, company.id)
 
+        module_permission = provisioning.ensure_permission(
+            _MODULE_MANAGE_PERMISSION,
+            description="P-6 module activation verification",
+        )
+        role = provisioning.ensure_role(
+            f"O4_MODULE_ADMIN_{suffix}",
+            name="O-4 Module Activation Verification",
+            scope=RoleScope.COMPANY,
+        )
+        provisioning.grant_permission_to_role(role.id, module_permission.id)
+        provisioning.assign_role(
+            user.id,
+            role.id,
+            tenant_id=tenant_id,
+            company_id=company.id,
+        )
+
         login = client.post(
             "/api/v1/auth/login",
             json={"login": login_name, "password": password},
@@ -242,6 +277,8 @@ def test_real_p3_context_without_milking_permission_is_denied_by_o4() -> None:
             json={"tenant_id": str(tenant_id), "company_id": str(company.id)},
         )
         headers = {"Authorization": f"Bearer {selected.json()['access_token']}"}
+
+        _enable_milking(client, headers)
 
         response = client.get("/api/v1/milking/sessions", headers=headers)
         assert response.status_code == 403
