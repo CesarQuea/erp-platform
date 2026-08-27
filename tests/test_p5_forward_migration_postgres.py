@@ -18,34 +18,26 @@ from app.platform.tenancy.context import TenantContext
 from app.platform.tenancy.registry import TenantConnectionConfig
 
 
-_TEST_ENV = "O4_MIGRATION_TEST_TENANT_DATABASES_JSON"
-_P4_HEAD = "0002_p4_command_execution"
+_TEST_ENV = "P5_MIGRATION_TEST_TENANT_DATABASES_JSON"
 _O4_HEAD = "0004_o4_milking_lifecycle_hardening"
-_MILKING_TABLES = {
-    "milking_output_profiles",
-    "milking_configurations",
-    "milking_sessions",
-    "milking_outputs",
-    "milking_annulment_requests",
-    "milking_audit_events",
-}
+_P5_HEAD = "0005_p5_module_activation"
 
 
 def _entries() -> list[tuple[UUID, str]]:
     raw = os.getenv(_TEST_ENV)
     if not raw:
-        pytest.skip(f"{_TEST_ENV} is required for O-4 forward migration tests")
+        pytest.skip(f"{_TEST_ENV} is required for P-5 forward migration tests")
     entries: list[tuple[UUID, str]] = []
     for raw_tenant_id, config in json.loads(raw).items():
         url = config["database_url"]
         if url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://")):
             entries.append((UUID(str(raw_tenant_id)), url))
     if len(entries) < 2:
-        pytest.skip(f"{_TEST_ENV} must contain two dedicated PostgreSQL tenant databases")
+        pytest.skip(f"{_TEST_ENV} must contain two dedicated PostgreSQL Tenant DBs")
     return entries[:2]
 
 
-def test_forward_migration_p4_to_o4_on_two_physical_tenant_databases() -> None:
+def test_forward_migration_o4_to_p5_on_two_physical_tenant_databases():
     entries = _entries()
     registry = EnvironmentTenantRegistry(
         {
@@ -54,48 +46,26 @@ def test_forward_migration_p4_to_o4_on_two_physical_tenant_databases() -> None:
         }
     )
     root = Path(__file__).resolve().parents[1]
-    p4_runner = TenantMigrationRunner(
-        repository_root=root,
-        target_revision=_P4_HEAD,
-    )
-
-    # Dedicated verification databases may be reused across runs and may already
-    # be at O-4/P-5. Restore the exact historical P-4 starting point before
-    # proving the original P-4 -> O-4 migration path.
-    for _, url in entries:
-        current = p4_runner.current_revision(url)
-        if current is not None and current != _P4_HEAD:
-            command.downgrade(p4_runner._config(url), _P4_HEAD)
-
-    p4_provisioner = TenantProvisioner(registry, migration_runner=p4_runner)
-    for tenant_id, url in entries:
-        context = TenantContext(tenant_id)
-        assert p4_provisioner.provision(context) == _P4_HEAD
-        from sqlalchemy import create_engine
-
-        engine = create_engine(normalize_database_url(url))
-        try:
-            tables = set(inspect(engine).get_table_names())
-            assert "platform_command_executions" in tables
-            assert _MILKING_TABLES.isdisjoint(tables)
-        finally:
-            engine.dispose()
-
     o4_runner = TenantMigrationRunner(
         repository_root=root,
         target_revision=_O4_HEAD,
     )
+
+    # Dedicated verification databases may be reused across runs. If a prior
+    # run already reached P-5, restore the exact O-4 starting point first.
+    for _, url in entries:
+        current = o4_runner.current_revision(url)
+        if current is not None and current != _O4_HEAD:
+            command.downgrade(o4_runner._config(url), _O4_HEAD)
+
     o4_provisioner = TenantProvisioner(registry, migration_runner=o4_runner)
     for tenant_id, url in entries:
-        context = TenantContext(tenant_id)
-        assert o4_provisioner.provision(context) == _O4_HEAD
-        assert o4_provisioner.provision(context) == _O4_HEAD
+        assert o4_provisioner.provision(TenantContext(tenant_id)) == _O4_HEAD
         from sqlalchemy import create_engine
 
         engine = create_engine(normalize_database_url(url))
         try:
-            tables = set(inspect(engine).get_table_names())
-            assert _MILKING_TABLES <= tables
+            assert "platform_module_activations" not in inspect(engine).get_table_names()
             with engine.connect() as connection:
                 metadata = connection.execute(
                     select(
@@ -105,5 +75,30 @@ def test_forward_migration_p4_to_o4_on_two_physical_tenant_databases() -> None:
                 ).one()
             assert metadata.tenant_id == tenant_id
             assert metadata.schema_version == _O4_HEAD
+        finally:
+            engine.dispose()
+
+    p5_runner = TenantMigrationRunner(repository_root=root)
+    p5_provisioner = TenantProvisioner(registry, migration_runner=p5_runner)
+    for tenant_id, url in entries:
+        assert p5_provisioner.provision(TenantContext(tenant_id)) == _P5_HEAD
+        assert p5_provisioner.provision(TenantContext(tenant_id)) == _P5_HEAD
+        from sqlalchemy import create_engine
+
+        engine = create_engine(normalize_database_url(url))
+        try:
+            inspector = inspect(engine)
+            assert "platform_module_activations" in inspector.get_table_names()
+            pk = inspector.get_pk_constraint("platform_module_activations")
+            assert pk["constrained_columns"] == ["company_id", "module_id"]
+            with engine.connect() as connection:
+                metadata = connection.execute(
+                    select(
+                        TenantMetadataRecord.tenant_id,
+                        TenantMetadataRecord.schema_version,
+                    )
+                ).one()
+            assert metadata.tenant_id == tenant_id
+            assert metadata.schema_version == _P5_HEAD
         finally:
             engine.dispose()

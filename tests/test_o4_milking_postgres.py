@@ -47,7 +47,7 @@ from app.platform.tenancy.registry import TenantConnectionConfig
 
 
 _TEST_ENV = "O4_TEST_TENANT_DATABASES_JSON"
-_O4_HEAD = "0004_o4_milking_lifecycle_hardening"
+_CURRENT_TENANT_HEAD = "0005_p5_module_activation"
 _ALL_PERMISSIONS = frozenset(
     {
         "milking.session.create",
@@ -108,7 +108,7 @@ def o4_postgres_runtime():
         tenant_id: provisioner.provision(TenantContext(tenant_id))
         for tenant_id, _ in entries
     }
-    assert set(revisions.values()) == {_O4_HEAD}
+    assert set(revisions.values()) == {_CURRENT_TENANT_HEAD}
 
     session_scope = TenantSessionScope()
     resolver = SqlAlchemyTenantDataSourceResolver(registry)

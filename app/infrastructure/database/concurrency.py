@@ -29,6 +29,31 @@ class SqlAlchemyCompareAndSet:
         expected_version: int,
         values: Mapping[str, object],
     ) -> int:
+        return self.update_versioned_where(
+            table,
+            identity_values={identity_column: identity_value},
+            version_column=version_column,
+            expected_version=expected_version,
+            values=values,
+        )
+
+    def update_versioned_where(
+        self,
+        table: Table,
+        *,
+        identity_values: Mapping[Any, object],
+        version_column: Any,
+        expected_version: int,
+        values: Mapping[str, object],
+    ) -> int:
+        """CAS update supporting single or composite identities.
+
+        The existing single-identity API delegates here so P-4 callers keep the
+        exact same behavior while later modules can reuse the same concurrency
+        primitive for composite primary keys.
+        """
+        if not identity_values:
+            raise InvalidCommandContextSignal("identity_values cannot be empty")
         if not isinstance(expected_version, int) or isinstance(expected_version, bool):
             raise InvalidCommandContextSignal("expected_version must be an integer")
         if expected_version < 0:
@@ -41,10 +66,11 @@ class SqlAlchemyCompareAndSet:
         session = self._session_scope.current()
         updates = dict(values)
         updates[version_column.key] = version_column + 1
+        statement = update(table)
+        for identity_column, identity_value in identity_values.items():
+            statement = statement.where(identity_column == identity_value)
         statement = (
-            update(table)
-            .where(identity_column == identity_value)
-            .where(version_column == expected_version)
+            statement.where(version_column == expected_version)
             .values(**updates)
             .returning(version_column)
         )

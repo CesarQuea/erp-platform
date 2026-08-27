@@ -1,0 +1,5 @@
+# P-5 frozen Markdown records intentionally use Markdown hard line breaks.
+# Keep Git whitespace checking strict everywhere else in the repository.
+docs/backend/BE-DES-005_Contrato_P5_Module_Registry_Activation_Configuration_Lifecycle_v0.1.md whitespace=-blank-at-eol
+docs/backend/BE-REG-005_Autorizacion_Implementacion_P5.md whitespace=-blank-at-eol
+docs/backend/BE-REV-005_Revision_Estatica_P5.md whitespace=-blank-at-eol
