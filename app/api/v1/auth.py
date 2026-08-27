@@ -5,15 +5,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from app.bootstrap.identity_platform import IdentityPlatformRuntime
-from app.platform.identity.errors import authentication_failed, identity_unavailable
+from app.api.security import access_token, current_principal, identity_runtime
 from app.platform.identity.model import AuthenticatedPrincipal
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_bearer = HTTPBearer(auto_error=False)
 
 
 class LoginRequest(BaseModel):
@@ -63,34 +60,9 @@ class ContextResponse(BaseModel):
     company_name: str
 
 
-def _runtime(request: Request) -> IdentityPlatformRuntime:
-    runtime = getattr(request.app.state, "identity_platform", None)
-    if runtime is None:
-        raise identity_unavailable()
-    return runtime
-
-
-def _access_token(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None,
-        Depends(_bearer),
-    ],
-) -> str:
-    if credentials is None or not credentials.credentials:
-        raise authentication_failed()
-    return credentials.credentials
-
-
-def _principal(
-    request: Request,
-    token: Annotated[str, Depends(_access_token)],
-) -> AuthenticatedPrincipal:
-    return _runtime(request).authentication.principal_from_access_token(token)
-
-
 @router.post("/login", response_model=TokenPairResponse)
 def login(payload: LoginRequest, request: Request) -> TokenPairResponse:
-    pair = _runtime(request).authentication.login(
+    pair = identity_runtime(request).authentication.login(
         login=payload.login,
         password=payload.password,
         client_label=payload.client_label,
@@ -106,7 +78,7 @@ def login(payload: LoginRequest, request: Request) -> TokenPairResponse:
 
 @router.post("/refresh", response_model=TokenPairResponse)
 def refresh(payload: RefreshRequest, request: Request) -> TokenPairResponse:
-    pair = _runtime(request).authentication.refresh(payload.refresh_token)
+    pair = identity_runtime(request).authentication.refresh(payload.refresh_token)
     return TokenPairResponse(
         access_token=pair.access_token,
         refresh_token=pair.refresh_token,
@@ -119,18 +91,18 @@ def refresh(payload: RefreshRequest, request: Request) -> TokenPairResponse:
 @router.post("/logout")
 def logout(
     request: Request,
-    token: Annotated[str, Depends(_access_token)],
+    token: Annotated[str, Depends(access_token)],
 ) -> dict[str, str]:
-    _runtime(request).authentication.logout(token)
+    identity_runtime(request).authentication.logout(token)
     return {"status": "logged_out"}
 
 
 @router.get("/me", response_model=MeResponse)
 def me(
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> MeResponse:
-    user = _runtime(request).authentication.get_user(principal)
+    user = identity_runtime(request).authentication.get_user(principal)
     return MeResponse(
         user_id=user.id,
         login=user.login,
@@ -145,7 +117,7 @@ def me(
 @router.get("/contexts", response_model=list[ContextResponse])
 def contexts(
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> list[ContextResponse]:
     return [
         ContextResponse(
@@ -154,7 +126,7 @@ def contexts(
             company_code=item.company_code,
             company_name=item.company_name,
         )
-        for item in _runtime(request).authentication.list_contexts(principal)
+        for item in identity_runtime(request).authentication.list_contexts(principal)
     ]
 
 
@@ -162,9 +134,9 @@ def contexts(
 def select_context(
     payload: ContextRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> ContextTokenResponse:
-    token = _runtime(request).authentication.select_context(
+    token = identity_runtime(request).authentication.select_context(
         principal,
         tenant_id=payload.tenant_id,
         company_id=payload.company_id,
