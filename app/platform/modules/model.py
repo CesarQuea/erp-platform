@@ -86,6 +86,10 @@ class CompanyModuleActivation:
             raise ValueError("updated_at must be timezone-aware")
         if (self.updated_at is None) != (self.updated_by is None):
             raise ValueError("updated_at and updated_by must be set together")
+        if self.version == 1 and self.updated_at is not None:
+            raise ValueError("version 1 activation cannot have update metadata")
+        if self.version > 1 and self.updated_at is None:
+            raise ValueError("version > 1 activation requires update metadata")
 
 
 @dataclass(frozen=True, slots=True)
