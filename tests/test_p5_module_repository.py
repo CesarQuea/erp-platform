@@ -4,10 +4,9 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import create_engine, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
 
 from app.infrastructure.database.models import CompanyRecord
 from app.infrastructure.database.module_models import ModuleActivationRecord
@@ -32,12 +31,12 @@ def _company(engine, company_id, code: str):
         )
 
 
-def _activation(company_id, actor_id, *, module_id="milking", version=1):
+def _activation(company_id, actor_id, *, module_id="milking"):
     return CompanyModuleActivation(
         company_id=company_id,
         module_id=module_id,
         state=ModuleActivationState.ENABLED,
-        version=version,
+        version=1,
         created_at=datetime(2026, 8, 26, 20, 0, tzinfo=timezone.utc),
         created_by=actor_id,
     )
@@ -138,6 +137,12 @@ def test_repository_composite_cas_updates_once_and_rejects_stale_writer():
         {"module_id": ""},
         {"state": "UNKNOWN"},
         {"version": 0},
+        {"version": 2},
+        {
+            "version": 1,
+            "updated_at": datetime(2026, 8, 26, 21, 0, tzinfo=timezone.utc),
+            "updated_by": uuid4(),
+        },
     ],
 )
 def test_database_constraints_reject_invalid_activation_rows(overrides):
