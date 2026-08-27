@@ -327,7 +327,6 @@ class ModuleActivationService:
                 "module_id": module_id,
                 "state": state.value,
                 "version": version,
-                "effective_enabled": state is ModuleActivationState.ENABLED,
                 "changed": changed,
             },
         )
