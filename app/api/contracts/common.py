@@ -38,10 +38,12 @@ COMMON_ERROR_RESPONSES: dict[int, dict[str, object]] = {
     503: {"model": ErrorResponse, "description": "Required platform capability is unavailable."},
 }
 
-SYSTEM_ERROR_RESPONSES: dict[int, dict[str, object]] = {
-    status_code: COMMON_ERROR_RESPONSES[status_code]
-    for status_code in (500, 503)
-}
+
+def error_responses(*status_codes: int) -> dict[int, dict[str, object]]:
+    return {
+        status_code: COMMON_ERROR_RESPONSES[status_code]
+        for status_code in status_codes
+    }
 
 
 def command_response(outcome: CommandExecutionOutcome) -> CommandResponse:
