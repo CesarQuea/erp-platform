@@ -6,10 +6,15 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from app.bootstrap.identity_platform import IdentityPlatformRuntime
+from app.api.contracts import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    CommandResponse,
+    command_response,
+)
+from app.api.security import current_principal, require_module_enabled
 from app.bootstrap.milking_platform import MilkingPlatformRuntime
 from app.modules.milking.admin_commands import (
     CreateMilkingConfiguration,
@@ -30,13 +35,14 @@ from app.modules.milking.commands import (
 from app.modules.milking.configuration import MilkingConfiguration, MilkingOutputProfile
 from app.modules.milking.domain import MilkingOutput, MilkingSession, MilkingSessionStatus
 from app.modules.milking.errors import milking_unavailable, validation_failed
-from app.platform.commands.model import CommandExecutionOutcome
-from app.platform.identity.errors import authentication_failed, identity_unavailable
 from app.platform.identity.model import AuthenticatedPrincipal
 
 
-router = APIRouter(prefix="/milking", tags=["milking"])
-_bearer = HTTPBearer(auto_error=False)
+router = APIRouter(
+    prefix="/milking",
+    tags=["milking"],
+    dependencies=[Depends(require_module_enabled("milking"))],
+)
 
 
 class CommandEnvelope(BaseModel):
@@ -102,12 +108,6 @@ class UpdateConfigurationRequest(VersionedCommandRequest):
     output_profile_id: UUID | None = None
     output_profile_version: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
-
-
-class CommandResponse(BaseModel):
-    code: str
-    replayed: bool
-    data: dict[str, object]
 
 
 class SessionResponse(BaseModel):
@@ -183,44 +183,11 @@ class ConfigurationResponse(BaseModel):
     updated_by: UUID | None
 
 
-def _identity_runtime(request: Request) -> IdentityPlatformRuntime:
-    runtime = getattr(request.app.state, "identity_platform", None)
-    if runtime is None:
-        raise identity_unavailable()
-    return runtime
-
-
 def _milking_runtime(request: Request) -> MilkingPlatformRuntime:
     runtime = getattr(request.app.state, "milking_platform", None)
     if runtime is None:
         raise milking_unavailable()
     return runtime
-
-
-def _access_token(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None,
-        Depends(_bearer),
-    ],
-) -> str:
-    if credentials is None or not credentials.credentials:
-        raise authentication_failed()
-    return credentials.credentials
-
-
-def _principal(
-    request: Request,
-    token: Annotated[str, Depends(_access_token)],
-) -> AuthenticatedPrincipal:
-    return _identity_runtime(request).authentication.principal_from_access_token(token)
-
-
-def _command_response(outcome: CommandExecutionOutcome) -> CommandResponse:
-    return CommandResponse(
-        code=outcome.result.code,
-        replayed=outcome.replayed,
-        data=dict(outcome.result.data),
-    )
 
 
 def _session_response(value: MilkingSession) -> SessionResponse:
@@ -319,7 +286,7 @@ def _validated(factory, /, **kwargs):
 def create_session(
     payload: CreateSessionRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         CreateMilkingSession,
@@ -331,7 +298,7 @@ def create_session(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.create_session(command, principal=principal)
     )
 
@@ -341,7 +308,7 @@ def set_general(
     session_id: UUID,
     payload: SetGeneralRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         SetMilkingGeneral,
@@ -353,7 +320,7 @@ def set_general(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.set_general(command, principal=principal)
     )
 
@@ -363,7 +330,7 @@ def set_notes(
     session_id: UUID,
     payload: SetNotesRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         SetMilkingNotes,
@@ -374,7 +341,7 @@ def set_notes(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.set_notes(command, principal=principal)
     )
 
@@ -384,7 +351,7 @@ def set_use_discard(
     session_id: UUID,
     payload: SetUseDiscardRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         SetMilkingUseDiscard,
@@ -396,7 +363,7 @@ def set_use_discard(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.set_use_discard(command, principal=principal)
     )
 
@@ -406,7 +373,7 @@ def confirm_session(
     session_id: UUID,
     payload: VersionedCommandRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         ConfirmMilkingSession,
@@ -416,7 +383,7 @@ def confirm_session(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.confirm(command, principal=principal)
     )
 
@@ -426,7 +393,7 @@ def cancel_session(
     session_id: UUID,
     payload: ReasonCommandRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         CancelDraftMilkingSession,
@@ -437,7 +404,7 @@ def cancel_session(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.cancel_draft(command, principal=principal)
     )
 
@@ -447,7 +414,7 @@ def request_annulment(
     session_id: UUID,
     payload: ReasonCommandRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         RequestMilkingAnnulment,
@@ -458,7 +425,7 @@ def request_annulment(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).commands.request_annulment(command, principal=principal)
     )
 
@@ -466,13 +433,13 @@ def request_annulment(
 @router.get("/sessions", response_model=list[SessionResponse])
 def list_sessions(
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
     farm_id: UUID | None = None,
     status: MilkingSessionStatus | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     shift_code: str | None = Query(default=None, max_length=64),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> list[SessionResponse]:
     values = _milking_runtime(request).query.list_sessions(
@@ -492,7 +459,7 @@ def list_sessions(
 def get_session(
     session_id: UUID,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> SessionResponse:
     return _session_response(
         _milking_runtime(request).query.get_session(
@@ -505,11 +472,11 @@ def get_session(
 @router.get("/outputs", response_model=list[OutputResponse])
 def list_outputs(
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
     farm_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> list[OutputResponse]:
     values = _milking_runtime(request).query.list_outputs(
@@ -527,7 +494,7 @@ def list_outputs(
 def get_output(
     output_id: UUID,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> OutputResponse:
     return _output_response(
         _milking_runtime(request).query.get_output(
@@ -540,10 +507,10 @@ def get_output(
 @router.get("/output-profiles", response_model=list[OutputProfileResponse])
 def list_output_profiles(
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
     profile_id: UUID | None = None,
     active: bool | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> list[OutputProfileResponse]:
     values = _milking_runtime(request).admin.list_output_profiles(
@@ -560,7 +527,7 @@ def list_output_profiles(
 def create_output_profile(
     payload: CreateOutputProfileRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         CreateOutputProfile,
@@ -570,7 +537,7 @@ def create_output_profile(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).admin.create_output_profile(command, principal=principal)
     )
 
@@ -580,7 +547,7 @@ def create_output_profile_version(
     profile_id: UUID,
     payload: CreateOutputProfileVersionRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         CreateOutputProfileVersion,
@@ -591,7 +558,7 @@ def create_output_profile_version(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).admin.create_output_profile_version(
             command,
             principal=principal,
@@ -608,7 +575,7 @@ def set_output_profile_active(
     profile_version: int,
     payload: SetOutputProfileActiveRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         SetOutputProfileActive,
@@ -620,7 +587,7 @@ def set_output_profile_active(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).admin.set_output_profile_active(
             command,
             principal=principal,
@@ -631,10 +598,10 @@ def set_output_profile_active(
 @router.get("/configurations", response_model=list[ConfigurationResponse])
 def list_configurations(
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
     farm_id: UUID | None = None,
     active: bool | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> list[ConfigurationResponse]:
     values = _milking_runtime(request).admin.list_configurations(
@@ -651,7 +618,7 @@ def list_configurations(
 def create_configuration(
     payload: CreateConfigurationRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         CreateMilkingConfiguration,
@@ -663,7 +630,7 @@ def create_configuration(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).admin.create_configuration(command, principal=principal)
     )
 
@@ -673,7 +640,7 @@ def update_configuration(
     configuration_id: UUID,
     payload: UpdateConfigurationRequest,
     request: Request,
-    principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
+    principal: Annotated[AuthenticatedPrincipal, Depends(current_principal)],
 ) -> CommandResponse:
     command = _validated(
         UpdateMilkingConfiguration,
@@ -686,6 +653,6 @@ def update_configuration(
         client_occurred_at=payload.client_occurred_at,
         client_instance_id=payload.client_instance_id,
     )
-    return _command_response(
+    return command_response(
         _milking_runtime(request).admin.update_configuration(command, principal=principal)
     )
