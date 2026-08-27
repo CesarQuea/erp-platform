@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from app.bootstrap.module_platform import build_module_registry
 from app.platform.modules.model import (
     ChangeModuleActivation,
+    CompanyModuleActivation,
     ModuleActivationState,
     ModuleDefinition,
 )
@@ -18,11 +20,15 @@ from app.platform.modules.registry import (
 )
 
 
-def definition(module_id: str = "inventory", version: str = "1.0.0") -> ModuleDefinition:
+def definition(
+    module_id: str = "inventory",
+    version: str = "1.0.0",
+    namespace: str | None = None,
+) -> ModuleDefinition:
     return ModuleDefinition(
         module_id=module_id,
         module_version=version,
-        configuration_namespace=module_id,
+        configuration_namespace=namespace or module_id,
     )
 
 
@@ -66,10 +72,12 @@ def test_registry_is_explicit_deterministic_and_frozen_after_bootstrap():
         registry.register(definition("manufacturing"))
 
 
-def test_registry_rejects_duplicates_and_unknown_modules():
-    registry = ModuleRegistry([definition("inventory")])
+def test_registry_rejects_duplicate_ids_namespaces_and_unknown_modules():
+    registry = ModuleRegistry([definition("inventory", namespace="stock")])
     with pytest.raises(ModuleRegistryError):
-        registry.register(definition("inventory", "2.0.0"))
+        registry.register(definition("inventory", "2.0.0", namespace="inventory"))
+    with pytest.raises(ModuleRegistryError):
+        registry.register(definition("warehouse", namespace="stock"))
     with pytest.raises(ModuleNotRegisteredError):
         registry.get("sales")
 
@@ -91,6 +99,43 @@ def test_activation_command_requires_uuid_valid_module_and_non_negative_version(
         ChangeModuleActivation(uuid4(), "Milking", 0)
     with pytest.raises(ValueError):
         ChangeModuleActivation(uuid4(), "milking", -1)
+
+
+def test_activation_domain_requires_update_metadata_from_version_two_onward():
+    now = datetime(2026, 8, 26, 20, 0, tzinfo=timezone.utc)
+    actor = uuid4()
+    company_id = uuid4()
+    first = CompanyModuleActivation(
+        company_id=company_id,
+        module_id="milking",
+        state=ModuleActivationState.ENABLED,
+        version=1,
+        created_at=now,
+        created_by=actor,
+    )
+    assert first.updated_at is None
+
+    with pytest.raises(ValueError):
+        CompanyModuleActivation(
+            company_id=company_id,
+            module_id="milking",
+            state=ModuleActivationState.DISABLED,
+            version=2,
+            created_at=now,
+            created_by=actor,
+        )
+
+    changed = CompanyModuleActivation(
+        company_id=company_id,
+        module_id="milking",
+        state=ModuleActivationState.DISABLED,
+        version=2,
+        created_at=now,
+        created_by=actor,
+        updated_at=now,
+        updated_by=actor,
+    )
+    assert changed.version == 2
 
 
 def test_activation_state_is_limited_to_enabled_and_disabled():
