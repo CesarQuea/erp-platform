@@ -20,6 +20,7 @@ class ModuleNotRegisteredError(ModuleRegistryError):
 class ModuleRegistry:
     def __init__(self, definitions: Iterable[ModuleDefinition] = ()) -> None:
         self._definitions: dict[str, ModuleDefinition] = {}
+        self._namespace_owners: dict[str, str] = {}
         self._frozen = False
         for definition in definitions:
             self.register(definition)
@@ -37,7 +38,14 @@ class ModuleRegistry:
             raise ModuleRegistryError(
                 f"duplicate module_id registration: {definition.module_id}"
             )
+        existing_owner = self._namespace_owners.get(definition.configuration_namespace)
+        if existing_owner is not None:
+            raise ModuleRegistryError(
+                "configuration namespace is already owned by module "
+                f"{existing_owner}: {definition.configuration_namespace}"
+            )
         self._definitions[definition.module_id] = definition
+        self._namespace_owners[definition.configuration_namespace] = definition.module_id
 
     def freeze(self) -> None:
         self._frozen = True
