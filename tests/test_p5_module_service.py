@@ -241,7 +241,6 @@ def test_enable_disable_reenable_versions_only_effective_changes():
         "module_id": "milking",
         "state": "ENABLED",
         "version": 1,
-        "effective_enabled": True,
         "changed": True,
     }
     assert availability.is_enabled(ctx, company_id, "milking")
