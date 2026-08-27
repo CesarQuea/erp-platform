@@ -24,6 +24,11 @@ def validate_module_id(module_id: str) -> None:
         raise ValueError("module_id must match ^[a-z][a-z0-9_]{0,63}$")
 
 
+def _require_aware(value: datetime, field_name: str) -> None:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field_name} must be timezone-aware")
+
+
 class ModuleActivationState(StrEnum):
     ENABLED = "ENABLED"
     DISABLED = "DISABLED"
@@ -84,10 +89,9 @@ class CompanyModuleActivation:
         if self.version < 1:
             raise ValueError("persisted activation version must be positive")
         validate_module_id(self.module_id)
-        if self.created_at.tzinfo is None:
-            raise ValueError("created_at must be timezone-aware")
-        if self.updated_at is not None and self.updated_at.tzinfo is None:
-            raise ValueError("updated_at must be timezone-aware")
+        _require_aware(self.created_at, "created_at")
+        if self.updated_at is not None:
+            _require_aware(self.updated_at, "updated_at")
         if (self.updated_at is None) != (self.updated_by is None):
             raise ValueError("updated_at and updated_by must be set together")
         if self.version == 1 and self.updated_at is not None:
@@ -123,13 +127,29 @@ class CompanyModuleStatus:
     effective_enabled: bool
 
     def __post_init__(self) -> None:
+        if not isinstance(self.definition, ModuleDefinition):
+            raise TypeError("definition must be a ModuleDefinition")
         if not isinstance(self.state, ModuleActivationState):
             raise TypeError("state must be a ModuleActivationState")
         if not isinstance(self.version, int) or isinstance(self.version, bool):
             raise TypeError("version must be an int")
         if self.version < 0:
             raise ValueError("version cannot be negative")
-        if not self.activation_present and self.version != 0:
-            raise ValueError("absent activation must have version 0")
-        if self.effective_enabled and self.state is not ModuleActivationState.ENABLED:
-            raise ValueError("effective enabled requires ENABLED state")
+        if not isinstance(self.activation_present, bool):
+            raise TypeError("activation_present must be a bool")
+        if not isinstance(self.effective_enabled, bool):
+            raise TypeError("effective_enabled must be a bool")
+
+        if not self.activation_present:
+            if self.version != 0:
+                raise ValueError("absent activation must have version 0")
+            if self.state is not ModuleActivationState.DISABLED:
+                raise ValueError("absent activation must be effectively DISABLED")
+            if self.effective_enabled:
+                raise ValueError("absent activation cannot be effectively enabled")
+            return
+
+        if self.version < 1:
+            raise ValueError("present activation must have a positive version")
+        if self.effective_enabled != (self.state is ModuleActivationState.ENABLED):
+            raise ValueError("effective_enabled must match persisted activation state")
