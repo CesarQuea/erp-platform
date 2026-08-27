@@ -15,14 +15,16 @@ def _scripts() -> ScriptDirectory:
     return ScriptDirectory.from_config(config)
 
 
-def test_o4_tenant_migration_chain_extends_p4_without_branching() -> None:
+def test_tenant_migration_chain_extends_o4_with_p5_without_branching() -> None:
     scripts = _scripts()
-    assert scripts.get_current_head() == "0004_o4_milking_lifecycle_hardening"
+    assert scripts.get_current_head() == "0005_p5_module_activation"
     o3 = scripts.get_revision("0003_o4_milking_general")
     o4 = scripts.get_revision("0004_o4_milking_lifecycle_hardening")
+    p5 = scripts.get_revision("0005_p5_module_activation")
     assert o3 is not None and o3.down_revision == "0002_p4_command_execution"
     assert o4 is not None and o4.down_revision == "0003_o4_milking_general"
-    assert scripts.get_heads() == ["0004_o4_milking_lifecycle_hardening"]
+    assert p5 is not None and p5.down_revision == "0004_o4_milking_lifecycle_hardening"
+    assert scripts.get_heads() == ["0005_p5_module_activation"]
 
 
 def test_historical_migration_target_does_not_change_default_head_behavior() -> None:
