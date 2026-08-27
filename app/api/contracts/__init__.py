@@ -4,11 +4,11 @@ from app.api.contracts.common import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
     PUBLIC_API_VERSION,
-    SYSTEM_ERROR_RESPONSES,
     CommandResponse,
     ErrorBody,
     ErrorResponse,
     command_response,
+    error_responses,
 )
 
 __all__ = [
@@ -17,9 +17,9 @@ __all__ = [
     "DEFAULT_PAGE_LIMIT",
     "MAX_PAGE_LIMIT",
     "PUBLIC_API_VERSION",
-    "SYSTEM_ERROR_RESPONSES",
     "CommandResponse",
     "ErrorBody",
     "ErrorResponse",
     "command_response",
+    "error_responses",
 ]
