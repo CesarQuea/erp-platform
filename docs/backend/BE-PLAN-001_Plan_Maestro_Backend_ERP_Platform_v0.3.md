@@ -1,7 +1,7 @@
 # BE-PLAN-001 — Plan Maestro de Desarrollo Backend ERP Platform
 
 **Versión:** 0.3  
-**Estado:** PROPUESTA PARA APROBACIÓN  
+**Estado:** APROBADO / CONGELADO  
 **Fecha:** 2026-08-28  
 **Producto base:** ERP Platform genérica / marca comercial no asignada  
 **Repositorio backend:** `erp-platform`  
@@ -9,26 +9,26 @@
 **Primer vertical de validación:** `Milking / Ordeño`  
 **Plan anterior:** `BE-PLAN-001 v0.2`  
 **ADR relacionados:** `BE-ADR-002 v0.1`, `BE-ADR-003 v0.1`  
-**Aprobación:** pendiente de ratificación expresa del usuario.
+**Aprobación:** aprobada expresamente por el usuario el 2026-08-28.
 
 ---
 
 ## 0. Propósito de v0.3
 
-BE-PLAN-001 v0.3 propone actualizar el Plan Maestro vigente después del cierre y merge de P-4, P-5 y P-6, y ordenar la etapa posterior a P-6 sin reabrir contratos cerrados.
+BE-PLAN-001 v0.3 actualiza el Plan Maestro vigente después del cierre y merge de P-4, P-5 y P-6, y ordena la etapa posterior a P-6 sin reabrir contratos cerrados.
 
-Esta versión propone:
+Esta versión:
 
-1. preservar los contratos y cierres P-1 a P-6;
-2. actualizar el estado real del roadmap transversal;
-3. reflejar que ERP Platform es una plataforma genérica, reutilizable y sin marca comercial en Core/Platform;
-4. reconocer `BE-ADR-003` como decisión arquitectónica separada sobre portabilidad razonable de infraestructura y almacenamiento;
-5. fijar P-7 como siguiente corte transversal;
-6. formalizar que P-7 define Sync transversal y el bounded context completa exclusivamente su semántica de dominio;
-7. establecer la secuencia posterior `P-7 → O-5 local → Staging → cierre O-5 → P-8`;
-8. establecer que Staging es gate de validación del vertical, no prerrequisito para diseñar o implementar O-5;
-9. mantener P-8 como foundation de operación productiva, sin adelantarlo;
-10. mantener Object Storage/Attachment Sync fuera del alcance automático de P-7, conforme a BE-ADR-003.
+1. preserva los contratos y cierres P-1 a P-6;
+2. actualiza el estado real del roadmap transversal;
+3. refleja que ERP Platform es una plataforma genérica, reutilizable y sin marca comercial en Core/Platform;
+4. reconoce `BE-ADR-003` como decisión arquitectónica separada sobre portabilidad razonable de infraestructura y almacenamiento;
+5. fija P-7 como siguiente corte transversal;
+6. formaliza que P-7 define Sync transversal y el bounded context completa exclusivamente su semántica de dominio;
+7. establece la secuencia posterior `P-7 → O-5 local → Staging → cierre O-5 → P-8`;
+8. establece que Staging es gate de validación del vertical, no prerrequisito para diseñar o implementar O-5;
+9. mantiene P-8 como foundation de operación productiva, sin adelantarlo;
+10. mantiene Object Storage/Attachment Sync fuera del alcance automático de P-7, conforme a BE-ADR-003.
 
 BE-PLAN-001 v0.2 permanece como antecedente histórico. Las decisiones cerradas que no sean modificadas expresamente continúan vigentes.
 
@@ -57,7 +57,7 @@ Este plan se interpreta conjuntamente con:
 
 - `BE-ADR-001` y decisiones vigentes sobre jerarquía transversal;
 - `BE-ADR-002 — Evolución incremental de ERP Platform y bounded contexts`;
-- `BE-ADR-003 — Portabilidad razonable de infraestructura y separación de almacenamiento`, una vez aprobado;
+- `BE-ADR-003 — Portabilidad razonable de infraestructura y separación de almacenamiento`;
 - contratos `BE-DES-*` aprobados;
 - cierres `BE-CLOSE-*` aprobados;
 - contratos/cierres de cada bounded context;
@@ -307,7 +307,7 @@ Prohibido:
 
 ## P-7 — Sync Foundation
 
-**Estado propuesto:** SIGUIENTE CORTE TRANSVERSAL — ALCANCE DETALLADO NO CONGELADO.
+**Estado:** SIGUIENTE CORTE TRANSVERSAL — ALCANCE DETALLADO NO CONGELADO.
 
 ### Objetivo macro
 
@@ -391,9 +391,9 @@ Después de P-7:
 - O-5 definirá entidades, payloads, comandos y reglas Milking de Sync;
 - si O-5 detecta una carencia transversal real, se detendrá ese punto y se evaluará un incremento de Platform.
 
-## 9.2 Secuencia propuesta P-7 → O-5 → P-8
+## 9.2 Secuencia aprobada P-7 → O-5 → P-8
 
-Se propone aprobar la siguiente secuencia:
+Se aprueba la siguiente secuencia:
 
 ```text
 P-7 — Sync Foundation
@@ -417,7 +417,7 @@ P-8 — Cloud Operations / Production Foundation
 producción formal cuando P-8 lo habilite
 ```
 
-### Regla propuesta de Staging
+### Regla de Staging
 
 Staging:
 
@@ -507,7 +507,7 @@ P-3  Identity + Authentication + Authorization         CERRADO + MERGED
 P-4  Transactions + Idempotency + Concurrency + Audit  CERRADO + MERGED
 P-5  Module Registry + Configuration + Lifecycle       CERRADO + MERGED
 P-6  API + Contracts + Compatibility                   CERRADO + MERGED
-P-7  Sync Foundation                                   SIGUIENTE PROPUESTO
+P-7  Sync Foundation                                   SIGUIENTE CORTE TRANSVERSAL
 P-8  Cloud Operations / Production Foundation          ROADMAP MACRO
 ```
 
@@ -521,47 +521,46 @@ Este SHA no constituye autorización automática para implementar P-7.
 
 ---
 
-# 14. SECUENCIA INMEDIATA PROPUESTA
+# 14. SECUENCIA INMEDIATA
 
 ```text
-1. Revisar y aprobar BE-ADR-003 y BE-PLAN-001 v0.3
-2. Merge documental solo mediante autorización expresa separada
-3. Confirmar nuevo SHA exacto de main
-4. Analizar P-7 desde offline-first, seguridad, idempotencia, concurrencia y compatibilidad
-5. Definir el alcance transversal mínimo de P-7
-6. Preparar BE-DES-007
-7. Revisar y aprobar BE-DES-007
-8. Autorizar SHA base P-7
-9. Crear rama y Draft PR P-7
-10. Implementar en commits pequeños
-11. Revisión estática
-12. Verificación independiente
-13. Cierre P-7 por autorización expresa
-14. Merge P-7 por autorización separada
-15. Continuar O-5 sobre P-7 cerrado
+1. Merge documental solo mediante autorización expresa separada
+2. Confirmar nuevo SHA exacto de main
+3. Analizar P-7 desde offline-first, seguridad, idempotencia, concurrencia y compatibilidad
+4. Definir el alcance transversal mínimo de P-7
+5. Preparar BE-DES-007
+6. Revisar y aprobar BE-DES-007
+7. Autorizar SHA base P-7
+8. Crear rama y Draft PR P-7
+9. Implementar en commits pequeños
+10. Revisión estática
+11. Verificación independiente
+12. Cierre P-7 por autorización expresa
+13. Merge P-7 por autorización separada
+14. Continuar O-5 sobre P-7 cerrado
 ```
 
 ---
 
-# 15. PUNTOS SUJETOS A APROBACIÓN
+# 15. APROBACIÓN
 
-BE-PLAN-001 v0.3 permanecerá como **PROPUESTA PARA APROBACIÓN** hasta ratificación expresa del usuario.
+BE-PLAN-001 v0.3 queda **APROBADO / CONGELADO** por autorización expresa del usuario del 2026-08-28.
 
-La aprobación propuesta significará:
+Esta aprobación:
 
-- no reabrir P-1 a P-6;
-- reconocer P-7 como siguiente corte transversal;
-- aprobar la separación P-7 transversal / O-5 dominio Milking;
-- aprobar la secuencia `P-7 → O-5 local → Staging → cierre O-5 → P-8`;
-- reconocer Staging como gate de validación de O-5 y no como prerrequisito de implementación;
-- mantener P-8 como corte previo a producción formal;
-- no autorizar automáticamente la implementación de P-7;
-- no congelar todavía `BE-DES-007`;
-- no autorizar deployment staging ni producción;
-- no autorizar merge de esta rama documental sin acto separado.
+- no reabre P-1 a P-6;
+- reconoce P-7 como siguiente corte transversal;
+- aprueba la separación P-7 transversal / O-5 dominio Milking;
+- aprueba la secuencia `P-7 → O-5 local → Staging → cierre O-5 → P-8`;
+- reconoce Staging como gate de validación de O-5 y no como prerrequisito de implementación;
+- mantiene P-8 como corte previo a producción formal;
+- no autoriza automáticamente la implementación de P-7;
+- no congela todavía `BE-DES-007`;
+- no autoriza deployment staging ni producción;
+- no autoriza merge de esta rama documental sin acto separado.
 
 ---
 
-# 16. REGLA RESUMIDA PROPUESTA
+# 16. REGLA RESUMIDA
 
 > **ERP Platform es una plataforma backend genérica y reutilizable. Platform contiene únicamente invariantes y mecanismos transversales; cada bounded context conserva su dominio. Las decisiones arquitectónicas de portabilidad y separación de almacenamiento se gobiernan mediante BE-ADR-003, mientras este Plan Maestro gobierna el orden de implementación. P-7 será la Sync Foundation transversal y deberá cerrarse antes de que O-5 especialice Sync para Milking. O-5 se implementará y verificará localmente antes de usar Staging como gate de validación cloud; después se cerrará O-5 y se abordará P-8 como foundation de operación productiva.**
