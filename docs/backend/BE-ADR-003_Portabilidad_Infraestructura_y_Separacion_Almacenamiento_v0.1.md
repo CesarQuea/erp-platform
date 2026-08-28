@@ -1,11 +1,11 @@
 # BE-ADR-003 — Portabilidad razonable de infraestructura y separación de almacenamiento
 
 **Versión:** 0.1  
-**Estado:** PROPUESTA PARA APROBACIÓN  
+**Estado:** APROBADO / CONGELADO  
 **Fecha:** 2026-08-28  
 **Ámbito:** ERP Platform genérica + bounded contexts + infraestructura  
 **ADR relacionado:** `BE-ADR-002 — Evolución incremental de ERP Platform y bounded contexts`  
-**Aprobación:** pendiente de ratificación expresa del usuario.  
+**Aprobación:** aprobada expresamente por el usuario el 2026-08-28.  
 **Efecto:** decisión arquitectónica transversal aplicable a la evolución futura de ERP Platform, bounded contexts e integraciones de infraestructura. No modifica retroactivamente contratos cerrados.
 
 ---
@@ -14,7 +14,7 @@
 
 ERP Platform se mantendrá como una plataforma **genérica, reutilizable y razonablemente portable entre infraestructuras**, evitando dependencias directas de proveedor dentro de Core, Platform y bounded contexts.
 
-Se proponen tres decisiones arquitectónicas duraderas:
+Se adoptan tres decisiones arquitectónicas duraderas:
 
 1. **Plataforma genérica y sin marca en el Core.**
 2. **Independencia razonable del proveedor de infraestructura en la lógica de aplicación.**
@@ -265,7 +265,7 @@ Estos costes se aceptarán cuando exista la necesidad real correspondiente.
 
 ---
 
-## 12. Invariantes propuestas para congelamiento
+## 12. Invariantes congeladas
 
 1. Core/Platform no dependen de una marca comercial concreta.
 2. La especialización se resuelve mediante configuración, `ImplementationProfile`, módulos u otros mecanismos explícitos fuera del Core transversal.
