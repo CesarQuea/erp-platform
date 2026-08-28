@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.contracts import API_V1_PREFIX, PUBLIC_API_VERSION
 from app.api.v1.router import api_v1_router
 from app.bootstrap.identity_platform import (
     IdentityPlatformRuntime,
@@ -83,10 +84,10 @@ def create_app(
 
     app = FastAPI(
         title=resolved_settings.app_name,
-        version="0.4.0",
+        version=PUBLIC_API_VERSION,
         lifespan=lifespan,
     )
     app.add_middleware(CorrelationIdMiddleware)
     install_exception_handlers(app)
-    app.include_router(api_v1_router, prefix="/api/v1")
+    app.include_router(api_v1_router, prefix=API_V1_PREFIX)
     return app

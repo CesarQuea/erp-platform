@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -12,16 +13,19 @@ from app.core.errors.models import PlatformError
 logger = logging.getLogger(__name__)
 
 
-def _correlation_id(request: Request) -> str | None:
-    return getattr(request.state, "correlation_id", None)
+def _correlation_id(request: Request) -> str:
+    value = getattr(request.state, "correlation_id", None)
+    if isinstance(value, str) and value:
+        return value
+    return str(uuid4())
 
 
 def _error_payload(
     *,
     code: str,
     message: str,
-    correlation_id: str | None,
-) -> dict[str, dict[str, str | None]]:
+    correlation_id: str,
+) -> dict[str, dict[str, str]]:
     return {
         "error": {
             "code": code,

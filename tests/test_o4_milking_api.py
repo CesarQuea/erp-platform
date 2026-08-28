@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -10,6 +9,7 @@ from app.bootstrap.application import create_app
 from app.core.config.settings import Settings
 from app.platform.commands.model import CommandExecutionOutcome, CommandResult
 from app.platform.identity.model import AuthenticatedPrincipal
+from app.platform.modules.errors import module_not_enabled
 
 
 ALL_MILKING_PERMISSIONS = frozenset(
@@ -62,6 +62,28 @@ class FakeAuthentication:
 class FakeIdentityRuntime:
     def __init__(self, permissions=ALL_MILKING_PERMISSIONS) -> None:
         self.authentication = FakeAuthentication(permissions)
+
+    def dispose(self) -> None:
+        pass
+
+
+class FakeModuleAvailability:
+    def __init__(self, *, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self.calls = 0
+
+    def require_enabled(self, context, company_id, module_id):
+        self.calls += 1
+        assert module_id == "milking"
+        if not self.enabled:
+            raise module_not_enabled()
+        return None
+
+
+class FakeModuleRuntime:
+    def __init__(self, *, enabled: bool = True) -> None:
+        self.availability = FakeModuleAvailability(enabled=enabled)
+        self.activations = None
 
     def dispose(self) -> None:
         pass
@@ -161,17 +183,24 @@ class FakeMilkingRuntime:
         pass
 
 
-def _client(*, milking_runtime=None, permissions=ALL_MILKING_PERMISSIONS):
+def _client(
+    *,
+    milking_runtime=None,
+    permissions=ALL_MILKING_PERMISSIONS,
+    module_enabled: bool = True,
+):
     identity = FakeIdentityRuntime(permissions)
     runtime = milking_runtime if milking_runtime is not None else FakeMilkingRuntime()
+    modules = FakeModuleRuntime(enabled=module_enabled)
     app = create_app(
         settings=Settings(environment="test"),
         database_runtime_factory=lambda settings: FakeDatabaseRuntime(),
         tenant_platform_factory=lambda settings: FakeTenantRuntime(),
         identity_platform_factory=lambda settings, tenant: identity,
         milking_platform_factory=lambda tenant: runtime,
+        module_platform_factory=lambda tenant: modules,
     )
-    return TestClient(app), identity, runtime
+    return TestClient(app), identity, runtime, modules
 
 
 def _headers() -> dict[str, str]:
@@ -187,7 +216,7 @@ def _base_command() -> dict[str, object]:
 
 
 def test_create_session_uses_authenticated_company_context_not_client_authority() -> None:
-    client, identity, runtime = _client()
+    client, identity, runtime, modules = _client()
     payload = {
         **_base_command(),
         "farm_id": str(uuid4()),
@@ -199,6 +228,7 @@ def test_create_session_uses_authenticated_company_context_not_client_authority(
 
     assert response.status_code == 200
     assert response.json()["code"] == "MILKING_TEST_OK"
+    assert modules.availability.calls == 1
     principal = runtime.commands.last_principal
     assert principal is not None
     assert principal.tenant_id == identity.authentication.tenant_id
@@ -208,7 +238,7 @@ def test_create_session_uses_authenticated_company_context_not_client_authority(
 
 
 def test_milking_endpoints_require_bearer_authentication() -> None:
-    client, _, _ = _client()
+    client, _, _, _ = _client()
     with client:
         response = client.get("/api/v1/milking/sessions")
     assert response.status_code == 401
@@ -216,7 +246,7 @@ def test_milking_endpoints_require_bearer_authentication() -> None:
 
 
 def test_milking_read_is_company_context_scoped_through_principal() -> None:
-    client, identity, runtime = _client()
+    client, identity, runtime, _ = _client()
     with client:
         response = client.get("/api/v1/milking/sessions", headers=_headers())
     assert response.status_code == 200
@@ -225,7 +255,7 @@ def test_milking_read_is_company_context_scoped_through_principal() -> None:
 
 
 def test_minimal_administration_routes_are_exposed() -> None:
-    client, _, runtime = _client()
+    client, _, runtime, _ = _client()
     profile_payload = {
         **_base_command(),
         "product_id": str(uuid4()),
@@ -248,7 +278,7 @@ def test_minimal_administration_routes_are_exposed() -> None:
 
 
 def test_no_generic_commands_endpoint_is_exposed() -> None:
-    client, _, _ = _client()
+    client, _, _, _ = _client()
     with client:
         response = client.post(
             "/api/v1/milking/commands",
@@ -260,12 +290,14 @@ def test_no_generic_commands_endpoint_is_exposed() -> None:
 
 def test_milking_fails_closed_when_runtime_is_unavailable() -> None:
     identity = FakeIdentityRuntime()
+    modules = FakeModuleRuntime(enabled=True)
     app = create_app(
         settings=Settings(environment="test"),
         database_runtime_factory=lambda settings: FakeDatabaseRuntime(),
         tenant_platform_factory=lambda settings: FakeTenantRuntime(),
         identity_platform_factory=lambda settings, tenant: identity,
         milking_platform_factory=lambda tenant: None,
+        module_platform_factory=lambda tenant: modules,
     )
     with TestClient(app) as client:
         response = client.get("/api/v1/milking/sessions", headers=_headers())
@@ -273,8 +305,18 @@ def test_milking_fails_closed_when_runtime_is_unavailable() -> None:
     assert response.json()["error"]["code"] == "MILKING_UNAVAILABLE"
 
 
+def test_milking_is_blocked_before_domain_when_module_is_disabled() -> None:
+    client, _, runtime, modules = _client(module_enabled=False)
+    with client:
+        response = client.get("/api/v1/milking/sessions", headers=_headers())
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "MODULE_NOT_ENABLED"
+    assert modules.availability.calls == 1
+    assert runtime.query.last_principal is None
+
+
 def test_naive_client_timestamp_is_rejected_before_service_execution() -> None:
-    client, _, runtime = _client()
+    client, _, runtime, _ = _client()
     payload = {
         "command_id": str(uuid4()),
         "client_occurred_at": "2026-08-25T08:00:00",
