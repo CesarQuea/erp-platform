@@ -86,8 +86,17 @@ def test_openapi_exposes_v1_modules_preserves_milking_and_adds_sync_routes() -> 
     assert "/api/v1/sync/{module_id}/changes" in paths
     assert "/api/v1/sync/{module_id}/bootstrap" in paths
 
-    login_422 = paths["/api/v1/auth/login"]["post"]["responses"]["422"]
-    assert "ErrorResponse" in str(login_422)
+    login_responses = paths["/api/v1/auth/login"]["post"]["responses"]
+    assert "ErrorResponse" in str(login_responses["422"])
+    assert "410" not in login_responses
+    assert "410" not in paths["/api/v1/milking/sessions"]["get"]["responses"]
+    assert "410" not in paths["/api/v1/modules"]["get"]["responses"]
+
+    sync_changes_responses = paths["/api/v1/sync/{module_id}/changes"]["get"]["responses"]
+    sync_bootstrap_responses = paths["/api/v1/sync/{module_id}/bootstrap"]["get"]["responses"]
+    assert "410" in sync_changes_responses
+    assert "410" in sync_bootstrap_responses
+
     schemas = schema["components"]["schemas"]
     assert "ErrorResponse" in schemas
     assert "CommandResponse" in schemas
