@@ -70,7 +70,8 @@ jobs:
             tests/test_p7_sync_api.py \
             tests/test_p7_sync_postgres.py \
             tests/test_p7_forward_migration_postgres.py \
-            tests/test_p7_migration_chain.py \
+            tests/test_o4_milking_migration_chain.py \
+            tests/test_p5_module_migration_chain.py \
             tests/test_p6_api_contracts.py \
             --junitxml=verification/P7/ci/junit-p7-focal.xml
 
