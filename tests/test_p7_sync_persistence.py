@@ -33,11 +33,18 @@ def _change(name: str = "value") -> SyncChange:
 
 def _fixture():
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
-    # Referencing the mapped classes above guarantees they are present in
-    # Base.metadata before create_all.
-    assert SyncStreamRecordModel.__tablename__ == "platform_sync_streams"
-    assert SyncBatchRecordModel.__tablename__ == "platform_sync_batches"
-    Base.metadata.create_all(engine)
+    # Keep this unit fixture scoped to P-7's persistence surface. Base.metadata
+    # also contains O-4 PostgreSQL-specific constraints (for example btrim),
+    # which are intentionally not portable to SQLite and are covered by their
+    # own PostgreSQL tests.
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            CompanyRecord.__table__,
+            SyncStreamRecordModel.__table__,
+            SyncBatchRecordModel.__table__,
+        ],
+    )
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
     tenant_id = uuid4()
     company_id = uuid4()
