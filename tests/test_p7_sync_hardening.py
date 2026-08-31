@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -37,6 +37,15 @@ class _RecordingRepository:
             recorded_at=kwargs["recorded_at"],
             changes=kwargs["changes"],
         )
+
+
+class _RecordCollector(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
 
 
 def _change(secret: str = "functional-secret") -> SyncChange:
@@ -87,7 +96,7 @@ def test_sync_publisher_rejects_naive_clock_before_repository_access() -> None:
     assert repository.append_calls == 0
 
 
-def test_sync_publisher_logs_ids_counts_and_position_without_payload(caplog) -> None:
+def test_sync_publisher_logs_ids_counts_and_position_without_payload() -> None:
     repository = _RecordingRepository()
     publisher = SyncPublisher(
         repository,
@@ -97,7 +106,12 @@ def test_sync_publisher_logs_ids_counts_and_position_without_payload(caplog) -> 
     command_id = uuid4()
     secret = "must-never-appear-in-sync-log"
 
-    with caplog.at_level(logging.INFO, logger="app.platform.sync.service"):
+    logger = logging.getLogger("app.platform.sync.service")
+    collector = _RecordCollector()
+    previous_level = logger.level
+    logger.addHandler(collector)
+    logger.setLevel(logging.INFO)
+    try:
         batch = publisher.publish(
             company_id=uuid4(),
             module_id="testsync",
@@ -105,8 +119,15 @@ def test_sync_publisher_logs_ids_counts_and_position_without_payload(caplog) -> 
             changes=(_change(secret),),
             source_command_id=command_id,
         )
+    finally:
+        logger.removeHandler(collector)
+        logger.setLevel(previous_level)
 
-    record = next(record for record in caplog.records if record.message == "sync_batch_published")
+    record = next(
+        record
+        for record in collector.records
+        if record.getMessage() == "sync_batch_published"
+    )
     assert record.batch_id == str(batch.batch_id)
     assert record.command_id == str(command_id)
     assert record.module_id == "testsync"
