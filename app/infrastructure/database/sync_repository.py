@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -177,6 +177,12 @@ class SqlAlchemySyncJournalRepository:
 
     @staticmethod
     def _to_batch(row: SyncBatchRecordModel) -> SyncBatch:
+        recorded_at = row.recorded_at
+        if recorded_at.tzinfo is None or recorded_at.utcoffset() is None:
+            # SQLAlchemy's SQLite adapter round-trips timezone-aware DateTime as
+            # a naive wall-clock value. SyncPublisher persists UTC, so the only
+            # valid rehydration for that supported fallback dialect is UTC.
+            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
         return SyncBatch(
             batch_id=row.batch_id,
             company_id=row.company_id,
@@ -185,6 +191,6 @@ class SqlAlchemySyncJournalRepository:
             position=int(row.position),
             sync_protocol_version=row.sync_protocol_version,
             source_command_id=row.source_command_id,
-            recorded_at=row.recorded_at,
+            recorded_at=recorded_at,
             changes=changes_from_document(row.changes_json),
         )
