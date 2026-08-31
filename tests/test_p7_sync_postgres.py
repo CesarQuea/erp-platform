@@ -32,6 +32,7 @@ from app.platform.tenancy.registry import TenantConnectionConfig
 
 _TEST_ENV = "P7_TEST_TENANT_DATABASES_JSON"
 _P7_HEAD = "0006_p7_sync_foundation"
+_TEST_MODULE_ID = "testsync"
 
 
 def _postgres_entries() -> list[tuple[UUID, str]]:
@@ -142,7 +143,7 @@ def test_postgres_business_p4_and_sync_commit_atomically_and_replay_once(postgre
         )
         batch = publisher.publish(
             company_id=company.id,
-            module_id="milking",
+            module_id=_TEST_MODULE_ID,
             stream_id="default",
             changes=(_change(resource_id, "committed"),),
             source_command_id=command_id,
@@ -175,7 +176,7 @@ def test_postgres_business_p4_and_sync_commit_atomically_and_replay_once(postgre
                 SyncBatchRecordModel.source_command_id,
             ).where(
                 SyncBatchRecordModel.company_id == company.id,
-                SyncBatchRecordModel.module_id == "milking",
+                SyncBatchRecordModel.module_id == _TEST_MODULE_ID,
                 SyncBatchRecordModel.stream_id == "default",
             )
         ).mappings().all()
@@ -205,7 +206,7 @@ def test_postgres_sync_publication_failure_rolls_back_business_and_p4_claim(post
         )
         tiny_publisher.publish(
             company_id=company.id,
-            module_id="milking",
+            module_id=_TEST_MODULE_ID,
             stream_id="default",
             changes=(_change(resource_id, "x" * 100),),
             source_command_id=command_id,
@@ -237,7 +238,7 @@ def test_postgres_sync_publication_failure_rolls_back_business_and_p4_claim(post
         stream_position = connection.execute(
             select(SyncStreamRecordModel.current_position).where(
                 SyncStreamRecordModel.company_id == company.id,
-                SyncStreamRecordModel.module_id == "milking",
+                SyncStreamRecordModel.module_id == _TEST_MODULE_ID,
                 SyncStreamRecordModel.stream_id == "default",
             )
         ).scalar_one_or_none()
@@ -256,7 +257,7 @@ def test_postgres_concurrent_first_publish_is_race_safe_and_gap_free(postgres_ru
         return boundary.run(
             lambda: publisher.publish(
                 company_id=company.id,
-                module_id="milking",
+                module_id=_TEST_MODULE_ID,
                 stream_id="race",
                 changes=(_change(resource_id, f"v-{index}"),),
             ).position
@@ -272,7 +273,7 @@ def test_postgres_concurrent_first_publish_is_race_safe_and_gap_free(postgres_ru
             select(SyncBatchRecordModel.position)
             .where(
                 SyncBatchRecordModel.company_id == company.id,
-                SyncBatchRecordModel.module_id == "milking",
+                SyncBatchRecordModel.module_id == _TEST_MODULE_ID,
                 SyncBatchRecordModel.stream_id == "race",
             )
             .order_by(SyncBatchRecordModel.position)
@@ -281,7 +282,7 @@ def test_postgres_concurrent_first_publish_is_race_safe_and_gap_free(postgres_ru
         stream_position = connection.execute(
             select(SyncStreamRecordModel.current_position).where(
                 SyncStreamRecordModel.company_id == company.id,
-                SyncStreamRecordModel.module_id == "milking",
+                SyncStreamRecordModel.module_id == _TEST_MODULE_ID,
                 SyncStreamRecordModel.stream_id == "race",
             )
         ).scalar_one()
@@ -307,7 +308,7 @@ def test_postgres_streams_and_companies_advance_independently(postgres_runtime):
         position = tx_factory.for_tenant(TenantContext(tenant_id)).run(
             lambda: publisher.publish(
                 company_id=company_id,
-                module_id="milking",
+                module_id=_TEST_MODULE_ID,
                 stream_id=stream_id,
                 changes=(_change(resource_id, stream_id),),
             ).position
