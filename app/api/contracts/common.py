@@ -6,7 +6,8 @@ from app.platform.commands.model import CommandExecutionOutcome
 
 
 API_V1_PREFIX = "/api/v1"
-PUBLIC_API_VERSION = "1.0.0"
+# P-7 adds compatible Sync endpoints within the frozen /api/v1 major.
+PUBLIC_API_VERSION = "1.1.0"
 DEFAULT_PAGE_LIMIT = 100
 MAX_PAGE_LIMIT = 500
 
@@ -31,8 +32,9 @@ COMMON_ERROR_RESPONSES: dict[int, dict[str, object]] = {
     400: {"model": ErrorResponse, "description": "Invalid request or domain validation failure."},
     401: {"model": ErrorResponse, "description": "Authentication failed."},
     403: {"model": ErrorResponse, "description": "Access denied."},
-    404: {"model": ErrorResponse, "description": "Requested resource or module is not available."},
-    409: {"model": ErrorResponse, "description": "Idempotency, concurrency, state or activation conflict."},
+    404: {"model": ErrorResponse, "description": "Requested resource, module or Sync stream is not available."},
+    409: {"model": ErrorResponse, "description": "Idempotency, concurrency, state, activation or protocol conflict."},
+    410: {"model": ErrorResponse, "description": "The requested retained Sync checkpoint is no longer available."},
     422: {"model": ErrorResponse, "description": "Request validation failed."},
     500: {"model": ErrorResponse, "description": "Unexpected server error."},
     503: {"model": ErrorResponse, "description": "Required platform capability is unavailable."},
