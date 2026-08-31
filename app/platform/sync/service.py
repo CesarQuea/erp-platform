@@ -106,6 +106,10 @@ class SyncPublisher:
 
         recorded_at = self._clock()
         _require_aware(recorded_at, "recorded_at")
+        # Normalize the persisted journal instant to UTC. PostgreSQL keeps the
+        # instant for timestamptz and SQLite drops tzinfo on round-trip; storing
+        # a UTC wall-clock value lets the SQLite adapter rehydrate it safely.
+        recorded_at = recorded_at.astimezone(timezone.utc)
         try:
             batch = self._repository.append_batch(
                 batch_id=batch_id,
