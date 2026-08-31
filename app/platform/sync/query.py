@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TypeVar
@@ -27,6 +28,7 @@ from app.platform.tenancy.context import TenantContext
 from app.platform.tenancy.transactions import TenantTransactionBoundaryFactory
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +77,8 @@ class SyncQueryService:
         limit: int,
         sync_protocol_version: str,
     ) -> SyncChangesPage:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise ValueError("limit must be a positive integer")
         tenant_id, company_id = self._scope(principal)
         self._require_protocol(sync_protocol_version)
         provider = self._prepare_provider(
@@ -122,6 +126,21 @@ class SyncQueryService:
             stream_id=stream_id,
             position=next_position,
         )
+        logger.info(
+            "sync_pull_succeeded",
+            extra={
+                "tenant_id": str(tenant_id),
+                "company_id": str(company_id),
+                "module_id": module_id,
+                "stream_id": stream_id,
+                "sync_protocol_version": SYNC_PROTOCOL_VERSION,
+                "from_position": after_position,
+                "position": next_position,
+                "batch_count": len(batches),
+                "has_more": has_more,
+                "outcome": "SUCCEEDED",
+            },
+        )
         return SyncChangesPage(
             batches=batches,
             next_cursor=next_cursor,
@@ -138,6 +157,8 @@ class SyncQueryService:
         limit: int,
         sync_protocol_version: str,
     ) -> SyncBootstrapPage:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise ValueError("limit must be a positive integer")
         tenant_id, company_id = self._scope(principal)
         self._require_protocol(sync_protocol_version)
         provider = self._prepare_provider(
@@ -198,6 +219,20 @@ class SyncQueryService:
                 start_position=start_position,
                 after_key=page.next_key,
             )
+        logger.info(
+            "sync_bootstrap_page_succeeded",
+            extra={
+                "tenant_id": str(tenant_id),
+                "company_id": str(company_id),
+                "module_id": module_id,
+                "stream_id": stream_id,
+                "sync_protocol_version": SYNC_PROTOCOL_VERSION,
+                "start_position": start_position,
+                "item_count": len(page.items),
+                "has_more": page.has_more,
+                "outcome": "SUCCEEDED",
+            },
+        )
         return SyncBootstrapPage(
             items=page.items,
             bootstrap_start_cursor=start_cursor,
