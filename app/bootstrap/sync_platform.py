@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from app.bootstrap.module_platform import ModulePlatformRuntime
@@ -19,6 +19,7 @@ from app.platform.sync.service import SyncPublisher
 from app.platform.sync.token import SyncTokenCodec
 
 DEFAULT_SYNC_BATCH_MAX_BYTES = 256 * 1024
+SyncProviderFactory = Callable[[TenantSessionScope], SyncProvider]
 
 
 @dataclass(slots=True)
@@ -60,6 +61,7 @@ def build_sync_platform(
     module_platform: ModulePlatformRuntime,
     *,
     providers: Iterable[SyncProvider] = (),
+    provider_factories: Iterable[SyncProviderFactory] = (),
 ) -> SyncPlatformRuntime | None:
     resolver = getattr(tenant_platform, "resolver", None)
     availability = getattr(module_platform, "availability", None)
@@ -67,10 +69,12 @@ def build_sync_platform(
     if resolver is None or availability is None or secret is None:
         return None
 
-    registry = SyncProviderRegistry(module_platform.registry, providers)
+    session_scope = TenantSessionScope()
+    resolved_providers = [*providers]
+    resolved_providers.extend(factory(session_scope) for factory in provider_factories)
+    registry = SyncProviderRegistry(module_platform.registry, resolved_providers)
     registry.freeze()
 
-    session_scope = TenantSessionScope()
     transactions = SqlAlchemyTenantTransactionBoundaryFactory(resolver, session_scope)
     repository = SqlAlchemySyncJournalRepository(session_scope)
     return SyncPlatformRuntime(
