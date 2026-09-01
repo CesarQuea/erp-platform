@@ -45,7 +45,7 @@ from app.platform.tenancy.registry import TenantConnectionConfig
 
 
 _TEST_ENV = "O4_TEST_TENANT_DATABASES_JSON"
-_CURRENT_TENANT_HEAD = "0005_p5_module_activation"
+_CURRENT_TENANT_HEAD = "0006_p7_sync_foundation"
 _PERMISSIONS = frozenset(
     {
         "milking.session.create",
