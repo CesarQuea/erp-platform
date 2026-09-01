@@ -13,6 +13,7 @@ from app.bootstrap.identity_platform import (
 )
 from app.bootstrap.milking_platform import MilkingPlatformRuntime, build_milking_platform
 from app.bootstrap.module_platform import ModulePlatformRuntime, build_module_platform
+from app.bootstrap.sync_platform import SyncPlatformRuntime, build_sync_platform
 from app.bootstrap.tenant_platform import TenantPlatformRuntime, build_tenant_platform
 from app.core.config.settings import Settings, get_settings
 from app.core.errors.handlers import install_exception_handlers
@@ -35,6 +36,10 @@ ModulePlatformRuntimeFactory = Callable[
     [TenantPlatformRuntime],
     ModulePlatformRuntime,
 ]
+SyncPlatformRuntimeFactory = Callable[
+    [Settings, TenantPlatformRuntime, ModulePlatformRuntime],
+    SyncPlatformRuntime | None,
+]
 
 
 def create_app(
@@ -45,6 +50,7 @@ def create_app(
     identity_platform_factory: IdentityPlatformRuntimeFactory = build_identity_platform,
     milking_platform_factory: MilkingPlatformRuntimeFactory = build_milking_platform,
     module_platform_factory: ModulePlatformRuntimeFactory = build_module_platform,
+    sync_platform_factory: SyncPlatformRuntimeFactory = build_sync_platform,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     configure_logging(resolved_settings.log_level)
@@ -56,6 +62,7 @@ def create_app(
         identity_platform: IdentityPlatformRuntime | None = None
         milking_platform: MilkingPlatformRuntime | None = None
         module_platform: ModulePlatformRuntime | None = None
+        sync_platform: SyncPlatformRuntime | None = None
         try:
             tenant_platform = tenant_platform_factory(resolved_settings)
             module_platform = module_platform_factory(tenant_platform)
@@ -64,14 +71,22 @@ def create_app(
                 tenant_platform,
             )
             milking_platform = milking_platform_factory(tenant_platform)
+            sync_platform = sync_platform_factory(
+                resolved_settings,
+                tenant_platform,
+                module_platform,
+            )
             app.state.settings = resolved_settings
             app.state.database_runtime = database_runtime
             app.state.tenant_platform = tenant_platform
             app.state.module_platform = module_platform
             app.state.identity_platform = identity_platform
             app.state.milking_platform = milking_platform
+            app.state.sync_platform = sync_platform
             yield
         finally:
+            if sync_platform is not None:
+                sync_platform.dispose()
             if milking_platform is not None:
                 milking_platform.dispose()
             if identity_platform is not None:

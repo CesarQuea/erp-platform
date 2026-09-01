@@ -47,7 +47,7 @@ def _app():
 
 def test_public_api_contract_constants_are_explicit_and_separate() -> None:
     assert API_V1_PREFIX == "/api/v1"
-    assert PUBLIC_API_VERSION == "1.0.0"
+    assert PUBLIC_API_VERSION == "1.1.0"
     assert DEFAULT_PAGE_LIMIT == 100
     assert MAX_PAGE_LIMIT == 500
     assert _app().version == PUBLIC_API_VERSION
@@ -74,7 +74,7 @@ def test_common_contract_models_preserve_existing_json_shapes() -> None:
     assert error.error.correlation_id == "corr-1"
 
 
-def test_openapi_exposes_v1_modules_and_preserves_milking_without_sync_routes() -> None:
+def test_openapi_exposes_v1_modules_preserves_milking_and_adds_sync_routes() -> None:
     schema = _app().openapi()
     paths = schema["paths"]
 
@@ -83,14 +83,26 @@ def test_openapi_exposes_v1_modules_and_preserves_milking_without_sync_routes() 
     assert "/api/v1/modules/{module_id}/enable" in paths
     assert "/api/v1/modules/{module_id}/disable" in paths
     assert "/api/v1/milking/sessions" in paths
-    assert not any("/sync" in path for path in paths)
+    assert "/api/v1/sync/{module_id}/changes" in paths
+    assert "/api/v1/sync/{module_id}/bootstrap" in paths
 
-    login_422 = paths["/api/v1/auth/login"]["post"]["responses"]["422"]
-    assert "ErrorResponse" in str(login_422)
+    login_responses = paths["/api/v1/auth/login"]["post"]["responses"]
+    assert "ErrorResponse" in str(login_responses["422"])
+    assert "410" not in login_responses
+    assert "410" not in paths["/api/v1/milking/sessions"]["get"]["responses"]
+    assert "410" not in paths["/api/v1/modules"]["get"]["responses"]
+
+    sync_changes_responses = paths["/api/v1/sync/{module_id}/changes"]["get"]["responses"]
+    sync_bootstrap_responses = paths["/api/v1/sync/{module_id}/bootstrap"]["get"]["responses"]
+    assert "410" in sync_changes_responses
+    assert "410" in sync_bootstrap_responses
+
     schemas = schema["components"]["schemas"]
     assert "ErrorResponse" in schemas
     assert "CommandResponse" in schemas
     assert "ModuleStatusResponse" in schemas
+    assert "SyncChangesResponse" in schemas
+    assert "SyncBootstrapResponse" in schemas
     assert "description" in schemas["ModuleStatusResponse"]["properties"]
 
     assert set(paths["/api/v1/live"]["get"]["responses"]) == {"200", "500"}

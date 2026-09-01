@@ -7,7 +7,10 @@ from sqlalchemy import engine_from_config, pool
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Tenant migrations run in-process in provisioning and verification flows.
+    # Keep already-configured application loggers alive, matching the Platform
+    # migration environment and preserving P-7 observability after upgrades.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = None
 
