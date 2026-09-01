@@ -18,7 +18,7 @@ from app.platform.tenancy.context import TenantContext
 
 _TENANT_ENV = "O4_TEST_TENANT_DATABASES_JSON"
 _IDENTITY_ENV = "O4_TEST_IDENTITY_DATABASE_URL"
-_CURRENT_TENANT_HEAD = "0005_p5_module_activation"
+_CURRENT_TENANT_HEAD = "0006_p7_sync_foundation"
 _MODULE_MANAGE_PERMISSION = "platform.modules.manage"
 _MILKING_PERMISSIONS = (
     "milking.session.create",
