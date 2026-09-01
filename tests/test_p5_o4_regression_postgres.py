@@ -74,7 +74,8 @@ def test_o4_milking_command_flow_remains_operational_on_p5_schema():
     provisioner = TenantProvisioner(
         tenant_registry,
         migration_runner=TenantMigrationRunner(
-            repository_root=Path(__file__).resolve().parents[1]
+            repository_root=Path(__file__).resolve().parents[1],
+            target_revision=_P5_HEAD,
         ),
     )
     assert provisioner.provision(TenantContext(tenant_id)) == _P5_HEAD
