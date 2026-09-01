@@ -78,7 +78,10 @@ def p5_runtime():
             for tenant_id, url in entries
         }
     )
-    runner = TenantMigrationRunner(repository_root=Path(__file__).resolve().parents[1])
+    runner = TenantMigrationRunner(
+        repository_root=Path(__file__).resolve().parents[1],
+        target_revision=_P5_HEAD,
+    )
     provisioner = TenantProvisioner(tenant_registry, migration_runner=runner)
     for tenant_id, _ in entries:
         assert provisioner.provision(TenantContext(tenant_id)) == _P5_HEAD
